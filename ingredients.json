@@ -1,0 +1,292 @@
+[
+  {
+    "id": "greek-yogurt",
+    "name": "Plain Greek yogurt (low-lactose)",
+    "category": "Dairy",
+    "unit": "g",
+    "kcal": 0.59,
+    "carb_per_unit": 0.04,
+    "protein_per_unit": 0.1,
+    "lipid_per_unit": 0.007
+  },
+  {
+    "id": "rolled-oats",
+    "name": "Rolled oats",
+    "category": "Grains",
+    "unit": "g",
+    "kcal": 3.89,
+    "carb_per_unit": 0.67,
+    "protein_per_unit": 0.17,
+    "lipid_per_unit": 0.07
+  },
+  {
+    "id": "protein-powder",
+    "name": "Protein powder",
+    "category": "Supplements",
+    "unit": "g",
+    "kcal": 4,
+    "carb_per_unit": 0.08,
+    "protein_per_unit": 0.8,
+    "lipid_per_unit": 0.015
+  },
+  {
+    "id": "mixed-berries",
+    "name": "Mixed berries",
+    "category": "Fruits",
+    "unit": "g",
+    "kcal": 0.57,
+    "carb_per_unit": 0.14,
+    "protein_per_unit": 0.007,
+    "lipid_per_unit": 0.003
+  },
+  {
+    "id": "chia-seeds",
+    "name": "Chia seeds",
+    "category": "Seeds",
+    "unit": "g",
+    "kcal": 4.86,
+    "carb_per_unit": 0.42,
+    "protein_per_unit": 0.17,
+    "lipid_per_unit": 0.31
+  },
+  {
+    "id": "honey",
+    "name": "Honey/maple/stevia",
+    "category": "Sweeteners",
+    "unit": "g",
+    "kcal": 3.04,
+    "carb_per_unit": 0.82,
+    "protein_per_unit": 0.0,
+    "lipid_per_unit": 0.0
+  },
+  {
+    "id": "firm-tofu",
+    "name": "Firm tofu",
+    "category": "Proteins",
+    "unit": "g",
+    "kcal": 0.76,
+    "carb_per_unit": 0.015,
+    "protein_per_unit": 0.08,
+    "lipid_per_unit": 0.05
+  },
+  {
+    "id": "cooked-quinoa",
+    "name": "Cooked quinoa",
+    "category": "Grains",
+    "unit": "g",
+    "kcal": 1.2,
+    "carb_per_unit": 0.21,
+    "protein_per_unit": 0.044,
+    "lipid_per_unit": 0.02
+  },
+  {
+    "id": "mixed-vegetables",
+    "name": "Mixed vegetables",
+    "category": "Vegetables",
+    "unit": "g",
+    "kcal": 0.5,
+    "carb_per_unit": 0.1,
+    "protein_per_unit": 0.02,
+    "lipid_per_unit": 0.002
+  },
+  {
+    "id": "olive-oil",
+    "name": "Olive oil",
+    "category": "Fats & Oils",
+    "unit": "g",
+    "kcal": 9,
+    "carb_per_unit": 0.0,
+    "protein_per_unit": 0.0,
+    "lipid_per_unit": 1.0
+  },
+  {
+    "id": "soy-sauce",
+    "name": "Soy sauce",
+    "category": "Condiments",
+    "unit": "g",
+    "kcal": 0.53,
+    "carb_per_unit": 0.05,
+    "protein_per_unit": 0.08,
+    "lipid_per_unit": 0.0
+  },
+  {
+    "id": "garlic",
+    "name": "Garlic",
+    "category": "Vegetables",
+    "unit": "g",
+    "kcal": 1.49,
+    "carb_per_unit": 0.33,
+    "protein_per_unit": 0.06,
+    "lipid_per_unit": 0.005
+  },
+  {
+    "id": "black-pepper",
+    "name": "Black pepper",
+    "category": "Spices",
+    "unit": "g",
+    "kcal": 2.55,
+    "carb_per_unit": 0.64,
+    "protein_per_unit": 0.1,
+    "lipid_per_unit": 0.03
+  },
+  {
+    "id": "chickpeas",
+    "name": "Chickpeas (cooked/canned, drained)",
+    "category": "Legumes & Pulses",
+    "unit": "g",
+    "kcal": 1.64,
+    "carb_per_unit": 0.27,
+    "protein_per_unit": 0.09,
+    "lipid_per_unit": 0.03
+  },
+  {
+    "id": "frozen-spinach",
+    "name": "Frozen spinach",
+    "category": "Vegetables",
+    "unit": "g",
+    "kcal": 0.23,
+    "carb_per_unit": 0.04,
+    "protein_per_unit": 0.03,
+    "lipid_per_unit": 0.004
+  },
+  {
+    "id": "tomato",
+    "name": "Tomato",
+    "category": "Vegetables",
+    "unit": "g",
+    "kcal": 0.18,
+    "carb_per_unit": 0.04,
+    "protein_per_unit": 0.009,
+    "lipid_per_unit": 0.002
+  },
+  {
+    "id": "avocado",
+    "name": "Avocado",
+    "category": "Fats & Oils",
+    "unit": "g",
+    "kcal": 1.6,
+    "carb_per_unit": 0.09,
+    "protein_per_unit": 0.02,
+    "lipid_per_unit": 0.15
+  },
+  {
+    "id": "whole-wheat-bread",
+    "name": "Whole wheat bread",
+    "category": "Grains",
+    "unit": "g",
+    "kcal": 2.5,
+    "carb_per_unit": 0.48,
+    "protein_per_unit": 0.09,
+    "lipid_per_unit": 0.03
+  },
+  {
+    "id": "lemon-juice",
+    "name": "Lemon juice",
+    "category": "Condiments",
+    "unit": "g",
+    "kcal": 0.22,
+    "carb_per_unit": 0.06,
+    "protein_per_unit": 0.003,
+    "lipid_per_unit": 0.0
+  },
+  {
+    "id": "salt",
+    "name": "Salt",
+    "category": "Condiments",
+    "unit": "g",
+    "kcal": 0,
+    "carb_per_unit": 0.0,
+    "protein_per_unit": 0.0,
+    "lipid_per_unit": 0.0
+  },
+  {
+    "id": "brown-rice",
+    "name": "Cooked brown rice",
+    "category": "Grains",
+    "unit": "g",
+    "kcal": 1.12,
+    "carb_per_unit": 0.23,
+    "protein_per_unit": 0.026,
+    "lipid_per_unit": 0.009
+  },
+  {
+    "id": "lentils",
+    "name": "Cooked lentils",
+    "category": "Legumes & Pulses",
+    "unit": "g",
+    "kcal": 1.16,
+    "carb_per_unit": 0.2,
+    "protein_per_unit": 0.09,
+    "lipid_per_unit": 0.004
+  },
+  {
+    "id": "cumin",
+    "name": "Cumin",
+    "category": "Spices",
+    "unit": "g",
+    "kcal": 3.75,
+    "carb_per_unit": 0.44,
+    "protein_per_unit": 0.18,
+    "lipid_per_unit": 0.22
+  },
+  {
+    "id": "cottage-cheese",
+    "name": "Low-fat cottage cheese",
+    "category": "Dairy",
+    "unit": "g",
+    "kcal": 0.72,
+    "carb_per_unit": 0.03,
+    "protein_per_unit": 0.12,
+    "lipid_per_unit": 0.01
+  },
+  {
+    "id": "banana",
+    "name": "Banana",
+    "category": "Fruits",
+    "unit": "g",
+    "kcal": 0.89,
+    "carb_per_unit": 0.23,
+    "protein_per_unit": 0.011,
+    "lipid_per_unit": 0.003
+  },
+  {
+    "id": "water",
+    "name": "Water",
+    "category": "Liquids",
+    "unit": "ml",
+    "kcal": 0,
+    "carb_per_unit": 0.0,
+    "protein_per_unit": 0.0,
+    "lipid_per_unit": 0.0
+  },
+  {
+    "id": "raw-almonds",
+    "name": "Raw almonds",
+    "category": "Fats & Oils",
+    "unit": "g",
+    "kcal": 5.75,
+    "carb_per_unit": 0.22,
+    "protein_per_unit": 0.21,
+    "lipid_per_unit": 0.50
+  },
+  {
+    "id": "salmon-fillet",
+    "name": "Salmon fillet (raw weight)",
+    "category": "Proteins",
+    "unit": "g",
+    "kcal": 2.08,
+    "carb_per_unit": 0.0,
+    "protein_per_unit": 0.2,
+    "lipid_per_unit": 0.13
+  },
+  {
+    "id": "smoked-paprika",
+    "name": "Smoked paprika",
+    "category": "Spices",
+    "unit": "g",
+    "kcal": 2.82,
+    "carb_per_unit": 0.54,
+    "protein_per_unit": 0.14,
+    "lipid_per_unit": 0.13
+  }
+]
