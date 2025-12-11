@@ -103,6 +103,508 @@ body {
     justify-content: flex-end;
 }
 
+/* Onboarding Content */
+.onboarding-content {
+    text-align: left;
+    max-width: 560px;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+.onboarding-content > .modal-icon {
+    display: block;
+    text-align: center;
+    font-size: 3rem;
+    color: var(--primary);
+    margin-bottom: 1rem;
+}
+
+.onboarding-content > h2 {
+    text-align: center;
+    margin-bottom: 0.5rem;
+}
+
+.onboarding-content > p {
+    text-align: center;
+    color: var(--text-secondary);
+    margin-bottom: 1.5rem;
+}
+
+.onboarding-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.onboarding-section h3 {
+    font-size: 0.875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-secondary);
+    margin-bottom: 0.75rem;
+}
+
+.onboarding-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1rem;
+}
+
+.form-field-full {
+    grid-column: 1 / -1;
+}
+
+.onboarding-content .btn-primary {
+    width: 100%;
+    justify-content: center;
+}
+
+/* Edit Profile Modal */
+.edit-profile-modal-content {
+    text-align: left;
+    max-width: 560px;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+.edit-profile-modal-content h2 {
+    margin-bottom: 1rem;
+}
+
+.edit-profile-modal-content .onboarding-form {
+    margin-bottom: 1.5rem;
+}
+
+.edit-profile-modal-content .form-actions {
+    justify-content: flex-end;
+}
+
+/* Profile Card */
+.profile-card {
+    background: var(--surface);
+    border-radius: var(--radius-lg);
+    padding: 1.5rem;
+    box-shadow: var(--shadow-sm);
+    border: 1px solid var(--border-light);
+}
+
+.profile-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--border-light);
+}
+
+.profile-icon {
+    font-size: 2.5rem;
+    color: var(--primary);
+    background: var(--primary-light);
+    padding: 0.5rem;
+    border-radius: var(--radius);
+}
+
+.profile-summary {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+}
+
+.profile-name {
+    font-weight: 600;
+    color: var(--text);
+}
+
+.profile-activity {
+    font-size: 0.875rem;
+    color: var(--text-muted);
+}
+
+.profile-calories {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+}
+
+.calorie-stat {
+    text-align: center;
+    padding: 0.75rem;
+    background: var(--border-light);
+    border-radius: var(--radius-sm);
+}
+
+.calorie-stat-primary {
+    background: var(--primary-light);
+}
+
+.calorie-label {
+    display: block;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    margin-bottom: 0.25rem;
+}
+
+.calorie-value {
+    font-size: 1.125rem;
+    font-weight: 700;
+    color: var(--text);
+}
+
+.calorie-stat-primary .calorie-value {
+    color: var(--primary-dark);
+}
+
+.calorie-deficit {
+    color: var(--success) !important;
+}
+
+.calorie-surplus {
+    color: var(--secondary) !important;
+}
+
+.profile-goal {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+    background: var(--secondary-light);
+    border-radius: var(--radius-sm);
+    margin-bottom: 1rem;
+    color: var(--text);
+    font-size: 0.9rem;
+}
+
+.profile-goal .material-symbols-rounded {
+    color: var(--secondary);
+    font-size: 1.25rem;
+}
+
+.profile-goal-warning {
+    background: var(--error-light);
+    border: 1px solid #fecaca;
+}
+
+.profile-goal-warning .material-symbols-rounded {
+    color: var(--error);
+}
+
+.btn-block {
+    width: 100%;
+    justify-content: center;
+}
+
+/* Schedule Actions */
+.schedule-actions {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+/* Schedule Overview */
+.schedule-overview {
+    background: var(--surface);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius);
+    padding: 1rem 1.25rem;
+    margin-bottom: 1.25rem;
+}
+
+.overview-stats {
+    display: flex;
+    gap: 2rem;
+    flex-wrap: wrap;
+}
+
+.overview-stat {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.overview-label {
+    font-size: 0.75rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+}
+
+.overview-value {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.overview-stat-highlight .overview-value {
+    color: var(--success);
+}
+
+.overview-stat-highlight.over-budget .overview-value {
+    color: var(--error);
+}
+
+.overview-cheat-day {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border-light);
+    font-size: 0.9rem;
+    color: var(--text-muted);
+}
+
+.overview-cheat-day .material-symbols-rounded {
+    font-size: 1.25rem;
+    color: var(--warning);
+}
+
+.overview-cheat-day strong {
+    color: var(--text);
+}
+
+/* Edit Schedule Modal */
+.edit-schedule-modal-content {
+    text-align: left;
+    max-width: 900px;
+    width: 95%;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+.edit-schedule-modal-content h2 {
+    margin-bottom: 1rem;
+}
+
+.schedule-editor {
+    margin-bottom: 1.5rem;
+}
+
+.schedule-editor-actions {
+    display: flex;
+    gap: 0.75rem;
+    margin-bottom: 1.25rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--border-light);
+}
+
+.schedule-editor-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.schedule-editor-day {
+    background: var(--border-light);
+    border-radius: var(--radius);
+    padding: 1rem;
+    transition: background-color 0.2s ease;
+}
+
+.schedule-editor-day.cheat-day-active {
+    background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+    border: 1px solid #fcd34d;
+}
+
+.schedule-editor-day-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.75rem;
+}
+
+.schedule-editor-day h3 {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text);
+    margin: 0;
+}
+
+.day-header-right {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.day-calories {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--text-muted);
+}
+
+.btn-cheat-day {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    color: var(--text-muted);
+    transition: all 0.15s ease;
+}
+
+.btn-cheat-day:hover {
+    background: var(--warning-light);
+    border-color: var(--warning);
+    color: var(--warning);
+}
+
+.btn-cheat-day.active {
+    background: var(--warning);
+    border-color: var(--warning);
+    color: white;
+}
+
+.btn-cheat-day .material-symbols-rounded {
+    font-size: 1.1rem;
+}
+
+.cheat-day-banner {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 1.5rem;
+    background: rgba(234, 179, 8, 0.1);
+    border-radius: var(--radius-sm);
+    color: #92400e;
+    font-weight: 500;
+    font-size: 0.9rem;
+}
+
+.cheat-day-banner .material-symbols-rounded {
+    font-size: 1.25rem;
+    color: var(--warning);
+}
+
+.schedule-editor-slots {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.75rem;
+}
+
+.schedule-editor-slot {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.slot-label {
+    font-size: 0.75rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+}
+
+.slot-select {
+    padding: 0.5rem;
+    font-size: 0.85rem;
+    font-family: inherit;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--text);
+    cursor: pointer;
+    width: 100%;
+}
+
+.slot-select:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 2px var(--primary-light);
+}
+
+/* Schedule Calorie Summary */
+.schedule-calorie-summary {
+    background: var(--surface);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius);
+    padding: 1rem 1.25rem;
+    margin-top: 1.5rem;
+}
+
+.calorie-summary-row {
+    display: flex;
+    gap: 2rem;
+    flex-wrap: wrap;
+}
+
+.calorie-summary-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.calorie-summary-label {
+    font-size: 0.75rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+}
+
+.calorie-summary-value {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.calorie-summary-value.under-budget {
+    color: var(--success);
+}
+
+.calorie-summary-value.over-budget {
+    color: var(--error);
+}
+
+.calorie-warning {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    background: var(--error-light);
+    border-radius: var(--radius-sm);
+    color: var(--error);
+    font-size: 0.85rem;
+    font-weight: 500;
+}
+
+.calorie-warning .material-symbols-rounded {
+    font-size: 1.1rem;
+}
+
+.cheat-day-info {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    background: var(--warning-light);
+    border-radius: var(--radius-sm);
+    color: #92400e;
+    font-size: 0.85rem;
+}
+
+.cheat-day-info .material-symbols-rounded {
+    font-size: 1.1rem;
+    color: var(--warning);
+}
+
+.cheat-day-info strong {
+    color: var(--text);
+}
+
 /* Create Meal Modal */
 .create-meal-modal-content {
     text-align: left;
@@ -1975,5 +2477,96 @@ body {
     .method-btn {
         width: 100%;
         justify-content: center;
+    }
+
+    /* Onboarding responsive */
+    .onboarding-content {
+        padding: 1.5rem;
+        max-height: 95vh;
+    }
+
+    .onboarding-grid {
+        grid-template-columns: 1fr;
+    }
+
+    /* Profile card responsive */
+    .profile-calories {
+        grid-template-columns: 1fr;
+        gap: 0.5rem;
+    }
+
+    .calorie-stat {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        text-align: left;
+    }
+
+    .calorie-label {
+        margin-bottom: 0;
+    }
+
+    /* Schedule editor responsive */
+    .schedule-actions {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.5rem;
+    }
+
+    .schedule-actions .view-toggle {
+        order: 2;
+        justify-content: center;
+    }
+
+    .schedule-actions .btn {
+        order: 1;
+    }
+
+    .edit-schedule-modal-content {
+        padding: 1.5rem;
+    }
+
+    .schedule-editor-actions {
+        flex-direction: column;
+    }
+
+    .schedule-editor-actions .btn {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .schedule-editor-slots {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .slot-select {
+        font-size: 0.8rem;
+    }
+
+    .overview-stats {
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+
+    .overview-stat {
+        flex-direction: row;
+        justify-content: space-between;
+        padding-bottom: 0.5rem;
+        border-bottom: 1px solid var(--border-light);
+    }
+
+    .overview-stat:last-child {
+        border-bottom: none;
+        padding-bottom: 0;
+    }
+
+    .calorie-summary-row {
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+
+    .calorie-summary-item {
+        flex-direction: row;
+        justify-content: space-between;
     }
 }

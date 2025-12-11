@@ -1,12 +1,34 @@
 import { dataStore, setIngredients, setMeals, setSchedule, aggregateShoppingList, getMealById } from './dataStore.js';
 import { Meal, FoodItem, FoodItemEntry, CookingInstruction } from './models.js';
+import { 
+  isFileSystemSupported, 
+  selectIngredientsFile, 
+  loadIngredientsFromFile, 
+  saveIngredientsToFile,
+  restoreFileHandle,
+  clearFileHandle,
+  getFileHandle,
+  hasStoredFileHandle,
+  requestPermissionAndLoad
+} from './fileSystem.js';
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 let state = {
   onboarded: false,
   startDay: 1,
-  checkedItems: {}
+  checkedItems: {},
+  profile: {
+    age: null,
+    sex: 'male',
+    weight: null,       // in kg
+    height: null,       // in cm
+    activityLevel: 1.55, // moderate
+    goalWeight: null,   // in kg
+    goalMonths: null,   // timeframe in months
+    maintenanceCalories: null,
+    recommendedCalories: null
+  }
 };
 
 // DOM Elements
@@ -27,6 +49,7 @@ const mealsFileInput = document.getElementById('meals-file');
 const mealDetail = document.getElementById('meal-detail');
 const mealDetailContent = document.getElementById('meal-detail-content');
 const ingredientsList = document.getElementById('ingredients-list');
+const ingredientsSearch = document.getElementById('ingredients-search');
 const importIngredientsBtn = document.getElementById('import-ingredients');
 const ingredientsFileInput = document.getElementById('ingredients-file');
 const addIngredientToggle = document.getElementById('add-ingredient-toggle');
@@ -91,7 +114,7 @@ let currentMealIngredients = []; // Temporary storage for meal ingredients being
 let currentMealInstructions = []; // Temporary storage for meal instructions being added
 
 async function init() {
-  bootstrapData();
+  await bootstrapData();
   loadState();
 
   if (state.onboarded) {
@@ -103,20 +126,45 @@ async function init() {
   setupEventListeners();
 }
 
-function bootstrapData() {
-  // Load ingredients from localStorage if available
-  const savedIngredients = localStorage.getItem('mealPrepIngredients');
-  if (savedIngredients) {
-    try {
-      const parsed = JSON.parse(savedIngredients);
-      const items = Array.isArray(parsed) ? parsed.map(obj => new FoodItem(obj)) : [];
-      setIngredients(items);
-    } catch (err) {
-      console.error('Failed to load saved ingredients', err);
+async function bootstrapData() {
+  // Try to load ingredients from file system first
+  let ingredientsLoaded = false;
+  
+  if (isFileSystemSupported()) {
+    // Check if we have a stored file handle
+    const hasHandle = await hasStoredFileHandle();
+    if (hasHandle) {
+      // Try to restore - this will request permission from user
+      const fileHandle = await restoreFileHandle();
+      if (fileHandle) {
+        const ingredientsData = await loadIngredientsFromFile(fileHandle);
+        if (ingredientsData && Array.isArray(ingredientsData)) {
+          const items = ingredientsData.map(obj => new FoodItem(obj));
+          setIngredients(items);
+          ingredientsLoaded = true;
+          console.log('Loaded ingredients from file system');
+        }
+      } else {
+        console.log('File handle exists but permission not granted yet');
+      }
+    }
+  }
+  
+  // Fallback to localStorage if file system didn't work
+  if (!ingredientsLoaded) {
+    const savedIngredients = localStorage.getItem('mealPrepIngredients');
+    if (savedIngredients) {
+      try {
+        const parsed = JSON.parse(savedIngredients);
+        const items = Array.isArray(parsed) ? parsed.map(obj => new FoodItem(obj)) : [];
+        setIngredients(items);
+      } catch (err) {
+        console.error('Failed to load saved ingredients', err);
+        setIngredients([]);
+      }
+    } else {
       setIngredients([]);
     }
-  } else {
-    setIngredients([]);
   }
 
   // Load meals from localStorage if available
@@ -134,13 +182,42 @@ function bootstrapData() {
     setMeals([]);
   }
 
-  setSchedule([]);
+  // Load schedule from localStorage if available
+  const savedSchedule = localStorage.getItem('mealPrepSchedule');
+  if (savedSchedule) {
+    try {
+      const parsed = JSON.parse(savedSchedule);
+      setSchedule(Array.isArray(parsed) ? parsed : []);
+    } catch (err) {
+      console.error('Failed to load saved schedule', err);
+      setSchedule([]);
+    }
+  } else {
+    setSchedule([]);
+  }
 }
 
 function loadState() {
   const saved = localStorage.getItem('mealPrepState');
   if (saved) {
-    state = JSON.parse(saved);
+    const loaded = JSON.parse(saved);
+    state = {
+      ...state,
+      ...loaded,
+      // Ensure profile object exists with defaults for backward compatibility
+      profile: {
+        age: null,
+        sex: 'male',
+        weight: null,
+        height: null,
+        activityLevel: 1.55,
+        goalWeight: null,
+        goalMonths: null,
+        maintenanceCalories: null,
+        recommendedCalories: null,
+        ...(loaded.profile || {})
+      }
+    };
   }
 }
 
@@ -148,14 +225,139 @@ function saveState() {
   localStorage.setItem('mealPrepState', JSON.stringify(state));
 }
 
-function saveIngredients() {
-  localStorage.setItem('mealPrepIngredients', JSON.stringify(dataStore.ingredients));
+// Calorie calculation functions using Mifflin-St Jeor equation
+function calculateBMR(weight, height, age, sex) {
+  // weight in kg, height in cm, age in years
+  if (sex === 'male') {
+    return (10 * weight) + (6.25 * height) - (5 * age) + 5;
+  } else {
+    return (10 * weight) + (6.25 * height) - (5 * age) - 161;
+  }
+}
+
+function calculateTDEE(bmr, activityLevel) {
+  return Math.round(bmr * activityLevel);
+}
+
+function calculateRecommendedCalories(maintenanceCalories, currentWeight, goalWeight, goalMonths) {
+  // 1 kg of body weight ≈ 7700 kcal
+  const weightChange = currentWeight - goalWeight; // positive = weight loss, negative = weight gain
+  const totalCalorieChange = weightChange * 7700;
+  const days = goalMonths * 30; // approximate
+  const dailyCalorieChange = totalCalorieChange / days;
+  
+  // Calculate recommended calories
+  let recommended = Math.round(maintenanceCalories - dailyCalorieChange);
+  
+  // Safety limits: 
+  // - Max healthy deficit is ~1000 kcal/day (lose ~1kg/week)
+  // - Max healthy surplus is ~500 kcal/day (gain ~0.5kg/week)
+  // - Never go below 1200 kcal
+  const minCalories = 1200;
+  const maxDeficit = 1000;
+  const maxSurplus = 500;
+  
+  if (recommended < maintenanceCalories - maxDeficit) {
+    recommended = maintenanceCalories - maxDeficit;
+  }
+  if (recommended < minCalories) {
+    recommended = minCalories;
+  }
+  if (recommended > maintenanceCalories + maxSurplus) {
+    recommended = maintenanceCalories + maxSurplus;
+  }
+  
+  return recommended;
+}
+
+// Check if goal is realistic (0.5-1kg per week is healthy)
+function isGoalRealistic(currentWeight, goalWeight, goalMonths) {
+  const weightChange = Math.abs(currentWeight - goalWeight);
+  const weeks = goalMonths * 4;
+  const weeklyChange = weightChange / weeks;
+  
+  // Healthy rate: 0.5-1kg per week for loss, 0.25-0.5kg for gain
+  const isLoss = currentWeight > goalWeight;
+  const maxHealthyRate = isLoss ? 1.0 : 0.5;
+  
+  return {
+    isRealistic: weeklyChange <= maxHealthyRate,
+    weeklyChange: weeklyChange,
+    recommendedMonths: Math.ceil(weightChange / (maxHealthyRate * 4))
+  };
+}
+
+function calculateAndUpdateProfile() {
+  const { age, sex, weight, height, activityLevel, goalWeight, goalMonths } = state.profile;
+  
+  if (age && weight && height && activityLevel && goalWeight && goalMonths) {
+    const bmr = calculateBMR(weight, height, age, sex);
+    const maintenanceCalories = calculateTDEE(bmr, activityLevel);
+    const recommendedCalories = calculateRecommendedCalories(maintenanceCalories, weight, goalWeight, goalMonths);
+    
+    state.profile.maintenanceCalories = maintenanceCalories;
+    state.profile.recommendedCalories = recommendedCalories;
+    saveState();
+    
+    return { maintenanceCalories, recommendedCalories };
+  }
+  return null;
+}
+
+function getActivityLevelLabel(level) {
+  const labels = {
+    1.2: 'Sedentary',
+    1.375: 'Lightly active',
+    1.55: 'Moderately active',
+    1.725: 'Very active',
+    1.9: 'Extra active'
+  };
+  return labels[level] || 'Moderate';
+}
+
+async function saveIngredients() {
+  // Save to file system if available
+  if (isFileSystemSupported() && getFileHandle()) {
+    const success = await saveIngredientsToFile(dataStore.ingredients);
+    if (success) {
+      console.log('Saved ingredients to file');
+    } else {
+      console.warn('Failed to save to file, falling back to localStorage');
+      localStorage.setItem('mealPrepIngredients', JSON.stringify(dataStore.ingredients));
+    }
+  } else {
+    // Fallback to localStorage
+    localStorage.setItem('mealPrepIngredients', JSON.stringify(dataStore.ingredients));
+  }
+}
+
+function saveSchedule() {
+  localStorage.setItem('mealPrepSchedule', JSON.stringify(dataStore.schedule));
 }
 
 function showOnboarding() {
   onboardingModal.classList.remove('hidden');
   app.classList.add('hidden');
   startDaySelect.value = state.startDay;
+  
+  // Pre-fill onboarding fields if profile data exists
+  if (state.profile) {
+    const ageInput = document.getElementById('onboarding-age');
+    const sexSelect = document.getElementById('onboarding-sex');
+    const weightInput = document.getElementById('onboarding-weight');
+    const heightInput = document.getElementById('onboarding-height');
+    const activitySelect = document.getElementById('onboarding-activity');
+    const goalWeightInput = document.getElementById('onboarding-goal-weight');
+    const goalMonthsInput = document.getElementById('onboarding-goal-months');
+    
+    if (ageInput && state.profile.age) ageInput.value = state.profile.age;
+    if (sexSelect && state.profile.sex) sexSelect.value = state.profile.sex;
+    if (weightInput && state.profile.weight) weightInput.value = state.profile.weight;
+    if (heightInput && state.profile.height) heightInput.value = state.profile.height;
+    if (activitySelect && state.profile.activityLevel) activitySelect.value = state.profile.activityLevel;
+    if (goalWeightInput && state.profile.goalWeight) goalWeightInput.value = state.profile.goalWeight;
+    if (goalMonthsInput && state.profile.goalMonths) goalMonthsInput.value = state.profile.goalMonths;
+  }
 }
 
 function showApp() {
@@ -163,16 +365,106 @@ function showApp() {
   app.classList.remove('hidden');
   renderShoppingList();
   renderSchedule();
+  renderScheduleOverview();
   renderMenuCards();
   renderIngredients();
+  renderProfileCard();
 }
 
 function setupEventListeners() {
-  startBtn.addEventListener('click', () => {
+  startBtn.addEventListener('click', async () => {
+    // Get all onboarding values
+    const ageInput = document.getElementById('onboarding-age');
+    const sexSelect = document.getElementById('onboarding-sex');
+    const weightInput = document.getElementById('onboarding-weight');
+    const heightInput = document.getElementById('onboarding-height');
+    const activitySelect = document.getElementById('onboarding-activity');
+    const goalWeightInput = document.getElementById('onboarding-goal-weight');
+    const goalMonthsInput = document.getElementById('onboarding-goal-months');
+    
+    const age = parseInt(ageInput?.value, 10);
+    const sex = sexSelect?.value || 'male';
+    const weight = parseFloat(weightInput?.value);
+    const height = parseFloat(heightInput?.value);
+    const activityLevel = parseFloat(activitySelect?.value) || 1.55;
+    const goalWeight = parseFloat(goalWeightInput?.value);
+    const goalMonths = parseInt(goalMonthsInput?.value, 10);
+    
+    // Validate required fields
+    clearValidationErrors(onboardingModal);
+    let hasError = false;
+    
+    if (!age || age < 15 || age > 100) {
+      showFieldError(ageInput, 'Please enter a valid age (15-100)');
+      hasError = true;
+    }
+    if (!weight || weight < 30 || weight > 300) {
+      showFieldError(weightInput, 'Please enter a valid weight (30-300 kg)');
+      hasError = true;
+    }
+    if (!height || height < 100 || height > 250) {
+      showFieldError(heightInput, 'Please enter a valid height (100-250 cm)');
+      hasError = true;
+    }
+    if (!goalWeight || goalWeight < 30 || goalWeight > 300) {
+      showFieldError(goalWeightInput, 'Please enter a valid goal weight (30-300 kg)');
+      hasError = true;
+    }
+    if (!goalMonths || goalMonths < 1 || goalMonths > 24) {
+      showFieldError(goalMonthsInput, 'Please enter a valid timeframe (1-24 months)');
+      hasError = true;
+    }
+    
+    if (hasError) return;
+    
+    // Save profile data
+    state.profile = {
+      age,
+      sex,
+      weight,
+      height,
+      activityLevel,
+      goalWeight,
+      goalMonths,
+      maintenanceCalories: null,
+      recommendedCalories: null
+    };
+    
+    // Calculate calories
+    calculateAndUpdateProfile();
+    
     state.startDay = parseInt(startDaySelect.value, 10);
     state.onboarded = true;
     saveState();
     showApp();
+    
+    // Show success toast with calorie info
+    if (state.profile.maintenanceCalories && state.profile.recommendedCalories) {
+      const diff = state.profile.maintenanceCalories - state.profile.recommendedCalories;
+      const direction = diff > 0 ? 'deficit' : diff < 0 ? 'surplus' : '';
+      showToast(`Daily target: ${state.profile.recommendedCalories} kcal${direction ? ` (${Math.abs(diff)} kcal ${direction})` : ''}`, 'success');
+    }
+    
+    // Prompt to connect ingredients file if no ingredients and File System API is supported
+    if (isFileSystemSupported() && !getFileHandle() && dataStore.ingredients.length === 0) {
+      setTimeout(async () => {
+        const shouldConnect = confirm('Would you like to connect to your ingredients.json file? This will enable automatic syncing of ingredient changes.');
+        if (shouldConnect) {
+          const fileHandle = await selectIngredientsFile();
+          if (fileHandle) {
+            const ingredientsData = await loadIngredientsFromFile(fileHandle);
+            if (ingredientsData && Array.isArray(ingredientsData)) {
+              const items = ingredientsData.map(obj => new FoodItem(obj));
+              setIngredients(items);
+              renderIngredients();
+              showToast('Connected to ingredients.json', 'success');
+            } else {
+              showToast('Invalid ingredients file', 'error');
+            }
+          }
+        }
+      }, 500);
+    }
   });
 
   tabBtns.forEach(btn => {
@@ -184,6 +476,10 @@ function setupEventListeners() {
 
   menuSearch.addEventListener('input', (e) => {
     filterMenuCards(e.target.value);
+  });
+
+  ingredientsSearch.addEventListener('input', (e) => {
+    filterIngredients(e.target.value);
   });
 
   if (importMealsBtn && mealsFileInput) {
@@ -234,6 +530,12 @@ function setupEventListeners() {
 
   // Settings event listeners
   setupSettingsListeners();
+  
+  // Profile event listeners
+  setupProfileListeners();
+  
+  // Schedule event listeners
+  setupScheduleListeners();
 
   const scheduleViewBtns = document.querySelectorAll('.view-btn');
   const scheduleGrid = document.getElementById('schedule-list');
@@ -762,6 +1064,18 @@ function filterMenuCards(query) {
   });
 }
 
+function filterIngredients(query) {
+  const cards = ingredientsList.querySelectorAll('.ingredient-card');
+  const lowerQuery = query.toLowerCase();
+
+  cards.forEach(card => {
+    const ingredientId = card.dataset.ingredientId;
+    const ingredient = dataStore.ingredients.find(i => i.id === ingredientId);
+    const searchText = ingredient ? `${ingredient.name} ${ingredient.category || ''}`.toLowerCase() : '';
+    card.style.display = searchText.includes(lowerQuery) ? '' : 'none';
+  });
+}
+
 function showMealDetail(mealId) {
   const meal = getMealById(mealId);
   if (!meal) {
@@ -972,7 +1286,7 @@ function slugify(value = '') {
     .replace(/(^-|-$)/g, '') || `item-${Date.now()}`;
 }
 
-function handleIngredientCreate() {
+async function handleIngredientCreate() {
   const name = (ingredientNameInput?.value || '').trim();
   const category = (ingredientCategoryInput?.value || '').trim() || 'Uncategorized';
   const unit = (ingredientUnitInput?.value || '').trim();
@@ -1009,7 +1323,7 @@ function handleIngredientCreate() {
 
   const next = [...dataStore.ingredients, newItem];
   setIngredients(next);
-  saveIngredients();
+  await saveIngredients();
   renderIngredients();
   clearIngredientForm();
   addIngredientForm.classList.add('hidden');
@@ -1043,7 +1357,7 @@ async function handleIngredientsImport(event) {
       showToast('No valid ingredients found in file', 'error');
     } else {
       setIngredients(cleaned);
-      saveIngredients();
+      await saveIngredients();
       renderIngredients();
       showToast(`Imported ${cleaned.length} ingredient${cleaned.length === 1 ? '' : 's'}`, 'success');
     }
@@ -1134,7 +1448,7 @@ function closeEditIngredientModal() {
   editIngredientModal.classList.add('hidden');
 }
 
-function handleIngredientEdit() {
+async function handleIngredientEdit() {
   if (!editingIngredientId) return;
 
   const name = (editIngredientName.value || '').trim();
@@ -1177,19 +1491,19 @@ function handleIngredientEdit() {
   });
 
   setIngredients(updatedIngredients);
-  saveIngredients();
+  await saveIngredients();
   renderIngredients();
   closeEditIngredientModal();
   showToast('Ingredient updated', 'success');
 }
 
-function deleteIngredient(ingredientId) {
+async function deleteIngredient(ingredientId) {
   const ingredient = dataStore.ingredients.find(i => i.id === ingredientId);
   if (!ingredient) return;
 
   const updatedIngredients = dataStore.ingredients.filter(i => i.id !== ingredientId);
   setIngredients(updatedIngredients);
-  saveIngredients();
+  await saveIngredients();
   renderIngredients();
   showToast(`"${ingredient.name}" deleted`, 'success');
 }
@@ -1515,6 +1829,10 @@ function setupSettingsListeners() {
   const clearShoppingBtn = document.getElementById('clear-shopping-data');
   const deleteIngredientsBtn = document.getElementById('delete-ingredients-data');
   const deleteAllBtn = document.getElementById('delete-all-data');
+  const connectFileBtn = document.getElementById('connect-ingredients-file');
+  const disconnectFileBtn = document.getElementById('disconnect-ingredients-file');
+  const fileStatus = document.getElementById('file-status');
+  const disconnectItem = document.getElementById('disconnect-file-item');
 
   // Initialize start day select with current value
   if (settingsStartDay) {
@@ -1527,6 +1845,79 @@ function setupSettingsListeners() {
     });
   }
 
+  // File system integration
+  if (connectFileBtn && isFileSystemSupported()) {
+    updateFileSystemUI();
+    
+    connectFileBtn.addEventListener('click', async () => {
+      // First, try to reconnect to stored handle by requesting permission
+      const hasStoredHandle = await hasStoredFileHandle();
+      if (hasStoredHandle && !getFileHandle()) {
+        // Try to get permission for stored handle
+        const ingredientsData = await requestPermissionAndLoad();
+        if (ingredientsData && Array.isArray(ingredientsData)) {
+          const items = ingredientsData.map(obj => new FoodItem(obj));
+          setIngredients(items);
+          renderIngredients();
+          await updateFileSystemUI();
+          showToast('Reconnected to ingredients.json', 'success');
+          return;
+        }
+      }
+      
+      // Otherwise, show file picker
+      const fileHandle = await selectIngredientsFile();
+      if (fileHandle) {
+        const ingredientsData = await loadIngredientsFromFile(fileHandle);
+        if (ingredientsData && Array.isArray(ingredientsData)) {
+          const items = ingredientsData.map(obj => new FoodItem(obj));
+          setIngredients(items);
+          renderIngredients();
+          await updateFileSystemUI();
+          showToast('Connected to ingredients.json', 'success');
+        } else {
+          showToast('Invalid ingredients file', 'error');
+        }
+      }
+    });
+
+    disconnectFileBtn?.addEventListener('click', async () => {
+      await clearFileHandle();
+      await updateFileSystemUI();
+      showToast('Disconnected from file', 'success');
+    });
+  } else if (connectFileBtn && !isFileSystemSupported()) {
+    connectFileBtn.disabled = true;
+    connectFileBtn.innerHTML = '<span class="material-symbols-rounded">block</span> Not Supported';
+    if (fileStatus) {
+      fileStatus.textContent = 'File System Access API not supported in this browser. Use Chrome or Edge.';
+    }
+  }
+
+  async function updateFileSystemUI() {
+    const hasFile = !!getFileHandle();
+    const hasStoredHandle = await hasStoredFileHandle();
+    
+    if (fileStatus && disconnectItem) {
+      if (hasFile) {
+        fileStatus.textContent = '✓ Connected to ingredients.json - changes auto-save';
+        fileStatus.style.color = 'var(--success)';
+        disconnectItem.style.display = 'flex';
+        connectFileBtn.innerHTML = '<span class="material-symbols-rounded">sync</span> Reconnect';
+      } else if (hasStoredHandle) {
+        fileStatus.textContent = '⚠ File connected but needs permission - click Reconnect';
+        fileStatus.style.color = 'var(--warning, #f59e0b)';
+        disconnectItem.style.display = 'flex';
+        connectFileBtn.innerHTML = '<span class="material-symbols-rounded">lock_open</span> Reconnect';
+      } else {
+        fileStatus.textContent = 'Connect to ingredients.json file for automatic sync';
+        fileStatus.style.color = '';
+        disconnectItem.style.display = 'none';
+        connectFileBtn.innerHTML = '<span class="material-symbols-rounded">attach_file</span> Select File';
+      }
+    }
+  }
+
   // Setup confirmation wrappers for destructive actions
   setupDestructiveAction(clearShoppingBtn, () => {
     state.checkedItems = {};
@@ -1535,9 +1926,9 @@ function setupSettingsListeners() {
     showToast('Shopping checklist cleared', 'success');
   });
 
-  setupDestructiveAction(deleteIngredientsBtn, () => {
+  setupDestructiveAction(deleteIngredientsBtn, async () => {
     setIngredients([]);
-    saveIngredients();
+    await saveIngredients();
     renderIngredients();
     showToast('All ingredients deleted', 'success');
   });
@@ -1547,12 +1938,24 @@ function setupSettingsListeners() {
     localStorage.removeItem('mealPrepState');
     localStorage.removeItem('mealPrepIngredients');
     localStorage.removeItem('mealPrepMeals');
+    localStorage.removeItem('mealPrepSchedule');
     
     // Reset state
     state = {
       onboarded: false,
       startDay: 1,
-      checkedItems: {}
+      checkedItems: {},
+      profile: {
+        age: null,
+        sex: 'male',
+        weight: null,
+        height: null,
+        activityLevel: 1.55,
+        goalWeight: null,
+        goalMonths: null,
+        maintenanceCalories: null,
+        recommendedCalories: null
+      }
     };
     
     // Reset data store
@@ -1593,6 +1996,680 @@ function setupDestructiveAction(button, onConfirm) {
       wrapper.classList.remove('confirming');
       onConfirm();
     });
+  }
+}
+
+// Profile card rendering
+function renderProfileCard() {
+  const profile = state.profile;
+  if (!profile) return;
+  
+  const statsSummary = document.getElementById('profile-stats-summary');
+  const activityLabel = document.getElementById('profile-activity-label');
+  const maintenanceEl = document.getElementById('profile-maintenance');
+  const targetEl = document.getElementById('profile-target');
+  const differenceEl = document.getElementById('profile-difference');
+  const goalTextEl = document.getElementById('profile-goal-text');
+  
+  if (profile.age && profile.weight && profile.height) {
+    statsSummary.textContent = `${profile.age}y, ${profile.weight}kg, ${profile.height}cm, ${profile.sex}`;
+  } else {
+    statsSummary.textContent = 'Profile not set';
+  }
+  
+  activityLabel.textContent = getActivityLevelLabel(profile.activityLevel);
+  
+  if (profile.maintenanceCalories) {
+    maintenanceEl.textContent = `${profile.maintenanceCalories} kcal`;
+  } else {
+    maintenanceEl.textContent = '-- kcal';
+  }
+  
+  if (profile.recommendedCalories) {
+    targetEl.textContent = `${profile.recommendedCalories} kcal`;
+  } else {
+    targetEl.textContent = '-- kcal';
+  }
+  
+  if (profile.maintenanceCalories && profile.recommendedCalories) {
+    const diff = profile.maintenanceCalories - profile.recommendedCalories;
+    if (diff > 0) {
+      differenceEl.textContent = `-${diff} kcal`;
+      differenceEl.className = 'calorie-value calorie-deficit';
+    } else if (diff < 0) {
+      differenceEl.textContent = `+${Math.abs(diff)} kcal`;
+      differenceEl.className = 'calorie-value calorie-surplus';
+    } else {
+      differenceEl.textContent = '0 kcal';
+      differenceEl.className = 'calorie-value';
+    }
+  } else {
+    differenceEl.textContent = '--';
+    differenceEl.className = 'calorie-value';
+  }
+  
+  if (profile.goalWeight && profile.goalMonths && profile.weight) {
+    const weightChange = profile.weight - profile.goalWeight;
+    const direction = weightChange > 0 ? 'lose' : weightChange < 0 ? 'gain' : 'maintain';
+    
+    // Check if goal is realistic
+    const goalCheck = isGoalRealistic(profile.weight, profile.goalWeight, profile.goalMonths);
+    const goalEl = goalTextEl.closest('.profile-goal');
+    
+    if (direction === 'maintain') {
+      goalTextEl.textContent = `Maintain ${profile.weight}kg`;
+      goalEl.classList.remove('profile-goal-warning');
+    } else {
+      let goalText = `${direction === 'lose' ? 'Lose' : 'Gain'} ${Math.abs(weightChange).toFixed(1)}kg in ${profile.goalMonths} month${profile.goalMonths > 1 ? 's' : ''} → ${profile.goalWeight}kg`;
+      
+      if (!goalCheck.isRealistic) {
+        goalText += ` ⚠️ (${goalCheck.weeklyChange.toFixed(1)}kg/week is aggressive — recommend ${goalCheck.recommendedMonths}+ months)`;
+        goalEl.classList.add('profile-goal-warning');
+      } else {
+        goalEl.classList.remove('profile-goal-warning');
+      }
+      
+      goalTextEl.textContent = goalText;
+    }
+  } else {
+    goalTextEl.textContent = 'No goal set';
+    const goalEl = goalTextEl.closest('.profile-goal');
+    if (goalEl) goalEl.classList.remove('profile-goal-warning');
+  }
+}
+
+// Edit profile modal functions
+function openEditProfileModal() {
+  const profile = state.profile || {};
+  const editProfileModal = document.getElementById('edit-profile-modal');
+  
+  const ageInput = document.getElementById('edit-profile-age');
+  const sexSelect = document.getElementById('edit-profile-sex');
+  const weightInput = document.getElementById('edit-profile-weight');
+  const heightInput = document.getElementById('edit-profile-height');
+  const activitySelect = document.getElementById('edit-profile-activity');
+  const goalWeightInput = document.getElementById('edit-profile-goal-weight');
+  const goalMonthsInput = document.getElementById('edit-profile-goal-months');
+  
+  if (ageInput) ageInput.value = profile.age || '';
+  if (sexSelect) sexSelect.value = profile.sex || 'male';
+  if (weightInput) weightInput.value = profile.weight || '';
+  if (heightInput) heightInput.value = profile.height || '';
+  if (activitySelect) activitySelect.value = profile.activityLevel || 1.55;
+  if (goalWeightInput) goalWeightInput.value = profile.goalWeight || '';
+  if (goalMonthsInput) goalMonthsInput.value = profile.goalMonths || '';
+  
+  editProfileModal.classList.remove('hidden');
+}
+
+function closeEditProfileModal() {
+  const editProfileModal = document.getElementById('edit-profile-modal');
+  editProfileModal.classList.add('hidden');
+  clearValidationErrors(editProfileModal);
+}
+
+function handleSaveProfile() {
+  const editProfileModal = document.getElementById('edit-profile-modal');
+  
+  const ageInput = document.getElementById('edit-profile-age');
+  const sexSelect = document.getElementById('edit-profile-sex');
+  const weightInput = document.getElementById('edit-profile-weight');
+  const heightInput = document.getElementById('edit-profile-height');
+  const activitySelect = document.getElementById('edit-profile-activity');
+  const goalWeightInput = document.getElementById('edit-profile-goal-weight');
+  const goalMonthsInput = document.getElementById('edit-profile-goal-months');
+  
+  const age = parseInt(ageInput?.value, 10);
+  const sex = sexSelect?.value || 'male';
+  const weight = parseFloat(weightInput?.value);
+  const height = parseFloat(heightInput?.value);
+  const activityLevel = parseFloat(activitySelect?.value) || 1.55;
+  const goalWeight = parseFloat(goalWeightInput?.value);
+  const goalMonths = parseInt(goalMonthsInput?.value, 10);
+  
+  clearValidationErrors(editProfileModal);
+  let hasError = false;
+  
+  if (!age || age < 15 || age > 100) {
+    showFieldError(ageInput, 'Please enter a valid age (15-100)');
+    hasError = true;
+  }
+  if (!weight || weight < 30 || weight > 300) {
+    showFieldError(weightInput, 'Please enter a valid weight (30-300 kg)');
+    hasError = true;
+  }
+  if (!height || height < 100 || height > 250) {
+    showFieldError(heightInput, 'Please enter a valid height (100-250 cm)');
+    hasError = true;
+  }
+  if (!goalWeight || goalWeight < 30 || goalWeight > 300) {
+    showFieldError(goalWeightInput, 'Please enter a valid goal weight (30-300 kg)');
+    hasError = true;
+  }
+  if (!goalMonths || goalMonths < 1 || goalMonths > 24) {
+    showFieldError(goalMonthsInput, 'Please enter a valid timeframe (1-24 months)');
+    hasError = true;
+  }
+  
+  if (hasError) return;
+  
+  // Update profile
+  state.profile = {
+    age,
+    sex,
+    weight,
+    height,
+    activityLevel,
+    goalWeight,
+    goalMonths,
+    maintenanceCalories: null,
+    recommendedCalories: null
+  };
+  
+  // Recalculate calories
+  calculateAndUpdateProfile();
+  
+  saveState();
+  renderProfileCard();
+  closeEditProfileModal();
+  
+  showToast('Profile updated', 'success');
+}
+
+// Setup edit profile event listeners
+function setupProfileListeners() {
+  const editProfileBtn = document.getElementById('edit-profile-btn');
+  const saveEditProfileBtn = document.getElementById('save-edit-profile');
+  const cancelEditProfileBtn = document.getElementById('cancel-edit-profile');
+  
+  if (editProfileBtn) {
+    editProfileBtn.addEventListener('click', openEditProfileModal);
+  }
+  if (saveEditProfileBtn) {
+    saveEditProfileBtn.addEventListener('click', handleSaveProfile);
+  }
+  if (cancelEditProfileBtn) {
+    cancelEditProfileBtn.addEventListener('click', closeEditProfileModal);
+  }
+}
+
+// Schedule editing
+let tempSchedule = []; // Temporary schedule being edited
+let tempCheatDay = null; // Index of cheat day (0-6) or null
+
+function initializeEmptySchedule() {
+  const days = [];
+  for (let i = 0; i < 7; i++) {
+    days.push({
+      day: i,
+      slots: [
+        { slot: 'breakfast', mealId: null, time: '7:00 AM' },
+        { slot: 'lunch', mealId: null, time: '1:00 PM' },
+        { slot: 'snack', mealId: null, time: '4:00 PM' },
+        { slot: 'dinner', mealId: null, time: '7:00 PM' }
+      ],
+      isCheatDay: false
+    });
+  }
+  return days;
+}
+
+function getWeeklyCalorieTarget() {
+  const dailyTarget = state.profile?.recommendedCalories;
+  if (!dailyTarget) return null;
+  return dailyTarget * 7;
+}
+
+function calculateScheduleCalories(schedule, excludeCheatDay = false) {
+  let total = 0;
+  schedule.forEach((day, index) => {
+    if (excludeCheatDay && day.isCheatDay) return;
+    if (!day.slots) return;
+    day.slots.forEach(slot => {
+      if (slot.mealId) {
+        const meal = getMealById(slot.mealId);
+        if (meal) {
+          total += meal.macros.kcal;
+        }
+      }
+    });
+  });
+  return Math.round(total);
+}
+
+function calculateDayCalories(day) {
+  let total = 0;
+  if (!day.slots) return 0;
+  day.slots.forEach(slot => {
+    if (slot.mealId) {
+      const meal = getMealById(slot.mealId);
+      if (meal) {
+        total += meal.macros.kcal;
+      }
+    }
+  });
+  return Math.round(total);
+}
+
+function updateScheduleCalorieSummary() {
+  const weeklyTarget = getWeeklyCalorieTarget();
+  const totalCalories = calculateScheduleCalories(tempSchedule, true); // Exclude cheat day
+  const cheatDayIndex = tempSchedule.findIndex(d => d.isCheatDay);
+  
+  const weeklyTargetEl = document.getElementById('schedule-weekly-target');
+  const totalCaloriesEl = document.getElementById('schedule-total-calories');
+  const remainingCaloriesEl = document.getElementById('schedule-remaining-calories');
+  const warningEl = document.getElementById('schedule-calorie-warning');
+  const cheatDayInfoEl = document.getElementById('schedule-cheat-day-info');
+  const cheatDayBudgetEl = document.getElementById('cheat-day-budget');
+  
+  if (weeklyTarget) {
+    weeklyTargetEl.textContent = `${weeklyTarget.toLocaleString()} kcal`;
+    totalCaloriesEl.textContent = `${totalCalories.toLocaleString()} kcal`;
+    
+    const remaining = weeklyTarget - totalCalories;
+    remainingCaloriesEl.textContent = `${remaining.toLocaleString()} kcal`;
+    
+    // Update styling based on over/under
+    if (remaining < 0) {
+      remainingCaloriesEl.classList.add('over-budget');
+      remainingCaloriesEl.classList.remove('under-budget');
+      warningEl.classList.remove('hidden');
+    } else {
+      remainingCaloriesEl.classList.remove('over-budget');
+      remainingCaloriesEl.classList.add('under-budget');
+      warningEl.classList.add('hidden');
+    }
+    
+    // Cheat day info
+    if (cheatDayIndex >= 0 && remaining > 0) {
+      cheatDayInfoEl.classList.remove('hidden');
+      cheatDayBudgetEl.textContent = remaining.toLocaleString();
+    } else {
+      cheatDayInfoEl.classList.add('hidden');
+    }
+  } else {
+    weeklyTargetEl.textContent = 'Set profile first';
+    totalCaloriesEl.textContent = `${totalCalories.toLocaleString()} kcal`;
+    remainingCaloriesEl.textContent = '--';
+    warningEl.classList.add('hidden');
+    cheatDayInfoEl.classList.add('hidden');
+  }
+}
+
+function openEditScheduleModal() {
+  const modal = document.getElementById('edit-schedule-modal');
+  
+  // Clone current schedule or create empty one
+  if (dataStore.schedule.length > 0) {
+    tempSchedule = JSON.parse(JSON.stringify(dataStore.schedule));
+    // Ensure isCheatDay property exists
+    tempSchedule.forEach(day => {
+      if (day.isCheatDay === undefined) day.isCheatDay = false;
+    });
+  } else {
+    tempSchedule = initializeEmptySchedule();
+  }
+  
+  tempCheatDay = tempSchedule.findIndex(d => d.isCheatDay);
+  if (tempCheatDay === -1) tempCheatDay = null;
+  
+  renderScheduleEditor();
+  updateScheduleCalorieSummary();
+  modal.classList.remove('hidden');
+}
+
+function closeEditScheduleModal() {
+  const modal = document.getElementById('edit-schedule-modal');
+  modal.classList.add('hidden');
+  tempSchedule = [];
+  tempCheatDay = null;
+}
+
+function renderScheduleEditor() {
+  const grid = document.getElementById('schedule-editor-grid');
+  const days = getScheduleDays();
+  const meals = dataStore.meals;
+  
+  // Ensure we have 7 days
+  while (tempSchedule.length < 7) {
+    tempSchedule.push({
+      day: tempSchedule.length,
+      slots: [
+        { slot: 'breakfast', mealId: null, time: '7:00 AM' },
+        { slot: 'lunch', mealId: null, time: '1:00 PM' },
+        { slot: 'snack', mealId: null, time: '4:00 PM' },
+        { slot: 'dinner', mealId: null, time: '7:00 PM' }
+      ],
+      isCheatDay: false
+    });
+  }
+  
+  grid.innerHTML = tempSchedule.map((day, dayIndex) => {
+    const slots = day.slots || [];
+    const isCheatDay = day.isCheatDay || false;
+    const dayCalories = calculateDayCalories(day);
+    
+    return `
+      <div class="schedule-editor-day ${isCheatDay ? 'cheat-day-active' : ''}">
+        <div class="schedule-editor-day-header">
+          <h3>Day ${dayIndex + 1} — ${days[dayIndex]}</h3>
+          <div class="day-header-right">
+            <span class="day-calories">${dayCalories} kcal</span>
+            <button class="btn-cheat-day ${isCheatDay ? 'active' : ''}" data-day="${dayIndex}" title="${isCheatDay ? 'Remove cheat day' : 'Set as cheat day'}">
+              <span class="material-symbols-rounded">celebration</span>
+            </button>
+          </div>
+        </div>
+        ${isCheatDay ? `
+          <div class="cheat-day-banner">
+            <span class="material-symbols-rounded">celebration</span>
+            Cheat Day — meals not scheduled
+          </div>
+        ` : `
+          <div class="schedule-editor-slots">
+            ${['breakfast', 'lunch', 'snack', 'dinner'].map(slotType => {
+              const slot = slots.find(s => s.slot === slotType) || { slot: slotType, mealId: null };
+              const selectedMeal = slot.mealId || '';
+              
+              // Filter meals by type matching slot
+              const matchingMeals = meals.filter(m => m.type.toLowerCase() === slotType.toLowerCase());
+              const otherMeals = meals.filter(m => m.type.toLowerCase() !== slotType.toLowerCase());
+              
+              return `
+                <div class="schedule-editor-slot">
+                  <label class="slot-label">${titleCase(slotType)}</label>
+                  <select class="slot-select" data-day="${dayIndex}" data-slot="${slotType}">
+                    <option value="">— No meal —</option>
+                    ${matchingMeals.length > 0 ? `
+                      <optgroup label="${titleCase(slotType)} Meals">
+                        ${matchingMeals.map(m => `<option value="${m.id}" ${m.id === selectedMeal ? 'selected' : ''}>${m.name} (${m.macros.kcal.toFixed(0)} kcal)</option>`).join('')}
+                      </optgroup>
+                    ` : ''}
+                    ${otherMeals.length > 0 ? `
+                      <optgroup label="Other Meals">
+                        ${otherMeals.map(m => `<option value="${m.id}" ${m.id === selectedMeal ? 'selected' : ''}>${m.name} (${m.macros.kcal.toFixed(0)} kcal)</option>`).join('')}
+                      </optgroup>
+                    ` : ''}
+                  </select>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        `}
+      </div>
+    `;
+  }).join('');
+  
+  // Attach change listeners for meal selection
+  grid.querySelectorAll('.slot-select').forEach(select => {
+    select.addEventListener('change', (e) => {
+      const dayIndex = parseInt(e.target.dataset.day, 10);
+      const slotType = e.target.dataset.slot;
+      const mealId = e.target.value || null;
+      
+      const slot = tempSchedule[dayIndex].slots.find(s => s.slot === slotType);
+      if (slot) {
+        slot.mealId = mealId;
+      }
+      updateScheduleCalorieSummary();
+      // Update day calories display
+      const dayEl = e.target.closest('.schedule-editor-day');
+      const dayCaloriesEl = dayEl.querySelector('.day-calories');
+      if (dayCaloriesEl) {
+        dayCaloriesEl.textContent = `${calculateDayCalories(tempSchedule[dayIndex])} kcal`;
+      }
+    });
+  });
+  
+  // Attach cheat day toggle listeners
+  grid.querySelectorAll('.btn-cheat-day').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const dayIndex = parseInt(btn.dataset.day, 10);
+      toggleCheatDay(dayIndex);
+    });
+  });
+}
+
+function toggleCheatDay(dayIndex) {
+  // If this day is already cheat day, remove it
+  if (tempSchedule[dayIndex].isCheatDay) {
+    tempSchedule[dayIndex].isCheatDay = false;
+    tempCheatDay = null;
+  } else {
+    // Remove cheat day from any other day
+    tempSchedule.forEach((day, i) => {
+      day.isCheatDay = i === dayIndex;
+    });
+    tempCheatDay = dayIndex;
+    // Clear meals for cheat day
+    tempSchedule[dayIndex].slots.forEach(slot => {
+      slot.mealId = null;
+    });
+  }
+  renderScheduleEditor();
+  updateScheduleCalorieSummary();
+}
+
+function autoGenerateSchedule() {
+  const meals = dataStore.meals;
+  const weeklyTarget = getWeeklyCalorieTarget();
+  
+  if (meals.length === 0) {
+    showToast('Add some meals first', 'error');
+    return;
+  }
+  
+  // Group meals by type and sort by calories (lowest first for pessimistic approach)
+  const mealsByType = {
+    breakfast: meals.filter(m => m.type.toLowerCase() === 'breakfast').sort((a, b) => a.macros.kcal - b.macros.kcal),
+    lunch: meals.filter(m => m.type.toLowerCase() === 'lunch').sort((a, b) => a.macros.kcal - b.macros.kcal),
+    snack: meals.filter(m => m.type.toLowerCase() === 'snack').sort((a, b) => a.macros.kcal - b.macros.kcal),
+    dinner: meals.filter(m => m.type.toLowerCase() === 'dinner').sort((a, b) => a.macros.kcal - b.macros.kcal)
+  };
+  
+  // Find the current cheat day if set
+  const existingCheatDay = tempSchedule.findIndex(d => d.isCheatDay);
+  
+  // Calculate how many days we're scheduling (exclude cheat day)
+  const daysToSchedule = existingCheatDay >= 0 ? 6 : 7;
+  
+  // Calculate daily budget if we have a target
+  const dailyBudget = weeklyTarget ? Math.floor(weeklyTarget / daysToSchedule) : null;
+  
+  // Generate schedule
+  const newSchedule = [];
+  let totalCalories = 0;
+  let dayCounter = 0;
+  
+  for (let i = 0; i < 7; i++) {
+    const isCheatDay = i === existingCheatDay;
+    
+    if (isCheatDay) {
+      newSchedule.push({
+        day: i,
+        slots: [
+          { slot: 'breakfast', mealId: null, time: '7:00 AM' },
+          { slot: 'lunch', mealId: null, time: '1:00 PM' },
+          { slot: 'snack', mealId: null, time: '4:00 PM' },
+          { slot: 'dinner', mealId: null, time: '7:00 PM' }
+        ],
+        isCheatDay: true
+      });
+      continue;
+    }
+    
+    const daySlots = [];
+    let dayCalories = 0;
+    
+    ['breakfast', 'lunch', 'snack', 'dinner'].forEach(slotType => {
+      const available = mealsByType[slotType];
+      let selectedMeal = null;
+      
+      if (available.length > 0) {
+        // Pessimistic: try to pick lowest calorie meals that fit budget
+        if (dailyBudget) {
+          // Find the best meal that fits remaining daily budget
+          const remainingDayBudget = dailyBudget - dayCalories;
+          const fittingMeals = available.filter(m => m.macros.kcal <= remainingDayBudget);
+          
+          if (fittingMeals.length > 0) {
+            // Rotate through fitting meals for variety
+            selectedMeal = fittingMeals[dayCounter % fittingMeals.length];
+          } else {
+            // If nothing fits, pick the lowest calorie option
+            selectedMeal = available[0];
+          }
+        } else {
+          // No target, just rotate
+          selectedMeal = available[dayCounter % available.length];
+        }
+      } else {
+        // Fallback: pick any low-calorie meal
+        const allMealsSorted = [...meals].sort((a, b) => a.macros.kcal - b.macros.kcal);
+        selectedMeal = allMealsSorted[dayCounter % allMealsSorted.length];
+      }
+      
+      if (selectedMeal) {
+        dayCalories += selectedMeal.macros.kcal;
+        totalCalories += selectedMeal.macros.kcal;
+      }
+      
+      daySlots.push({
+        slot: slotType,
+        mealId: selectedMeal ? selectedMeal.id : null,
+        time: defaultTimeForSlot(slotType)
+      });
+    });
+    
+    newSchedule.push({ day: i, slots: daySlots, isCheatDay: false });
+    dayCounter++;
+  }
+  
+  tempSchedule = newSchedule;
+  
+  renderScheduleEditor();
+  updateScheduleCalorieSummary();
+  
+  if (weeklyTarget && totalCalories <= weeklyTarget) {
+    const remaining = weeklyTarget - totalCalories;
+    showToast(`Generated within budget (${remaining.toLocaleString()} kcal remaining)`, 'success');
+  } else if (weeklyTarget) {
+    showToast('Generated (may exceed target - adjust manually)', 'default');
+  } else {
+    showToast('Schedule auto-generated', 'success');
+  }
+}
+
+function clearScheduleEditor() {
+  const existingCheatDay = tempSchedule.findIndex(d => d.isCheatDay);
+  tempSchedule = initializeEmptySchedule();
+  // Preserve cheat day selection
+  if (existingCheatDay >= 0) {
+    tempSchedule[existingCheatDay].isCheatDay = true;
+  }
+  renderScheduleEditor();
+  updateScheduleCalorieSummary();
+  showToast('Schedule cleared', 'default');
+}
+
+function saveEditedSchedule() {
+  // Filter out days with no meals assigned (except cheat day)
+  const hasAnyMeal = tempSchedule.some(day => 
+    day.isCheatDay || day.slots.some(slot => slot.mealId)
+  );
+  
+  if (!hasAnyMeal) {
+    setSchedule([]);
+  } else {
+    setSchedule(tempSchedule);
+  }
+  
+  saveSchedule();
+  renderSchedule();
+  renderScheduleOverview();
+  renderShoppingList();
+  closeEditScheduleModal();
+  showToast('Schedule saved', 'success');
+}
+
+function renderScheduleOverview() {
+  const overview = document.getElementById('schedule-overview');
+  const schedule = dataStore.schedule;
+  
+  if (!schedule.length) {
+    overview.classList.add('hidden');
+    return;
+  }
+  
+  overview.classList.remove('hidden');
+  
+  const weeklyTarget = getWeeklyCalorieTarget();
+  const cheatDayIndex = schedule.findIndex(d => d.isCheatDay);
+  const totalCalories = calculateScheduleCalories(schedule, true); // Exclude cheat day
+  
+  const weeklyTargetEl = document.getElementById('overview-weekly-target');
+  const scheduledEl = document.getElementById('overview-scheduled');
+  const remainingEl = document.getElementById('overview-remaining');
+  const remainingContainer = document.getElementById('overview-remaining-container');
+  const cheatDayEl = document.getElementById('overview-cheat-day');
+  const cheatDayNameEl = document.getElementById('overview-cheat-day-name');
+  const cheatBudgetEl = document.getElementById('overview-cheat-budget');
+  
+  if (weeklyTarget) {
+    weeklyTargetEl.textContent = `${weeklyTarget.toLocaleString()} kcal`;
+    scheduledEl.textContent = `${totalCalories.toLocaleString()} kcal`;
+    
+    const remaining = weeklyTarget - totalCalories;
+    remainingEl.textContent = `${remaining.toLocaleString()} kcal`;
+    
+    if (remaining < 0) {
+      remainingContainer.classList.add('over-budget');
+      remainingContainer.classList.remove('under-budget');
+    } else {
+      remainingContainer.classList.remove('over-budget');
+      remainingContainer.classList.add('under-budget');
+    }
+    
+    // Cheat day info
+    if (cheatDayIndex >= 0) {
+      const days = getScheduleDays();
+      cheatDayEl.classList.remove('hidden');
+      cheatDayNameEl.textContent = days[cheatDayIndex];
+      cheatBudgetEl.textContent = remaining > 0 ? remaining.toLocaleString() : '0';
+    } else {
+      cheatDayEl.classList.add('hidden');
+    }
+  } else {
+    weeklyTargetEl.textContent = 'Set profile';
+    scheduledEl.textContent = `${totalCalories.toLocaleString()} kcal`;
+    remainingEl.textContent = '--';
+    remainingContainer.classList.remove('over-budget', 'under-budget');
+    cheatDayEl.classList.add('hidden');
+  }
+}
+
+function setupScheduleListeners() {
+  const editScheduleBtn = document.getElementById('edit-schedule-btn');
+  const saveScheduleBtn = document.getElementById('save-schedule');
+  const cancelScheduleBtn = document.getElementById('cancel-schedule');
+  const autoGenerateBtn = document.getElementById('auto-generate-schedule');
+  const clearScheduleBtn = document.getElementById('clear-schedule');
+  
+  if (editScheduleBtn) {
+    editScheduleBtn.addEventListener('click', openEditScheduleModal);
+  }
+  if (saveScheduleBtn) {
+    saveScheduleBtn.addEventListener('click', saveEditedSchedule);
+  }
+  if (cancelScheduleBtn) {
+    cancelScheduleBtn.addEventListener('click', closeEditScheduleModal);
+  }
+  if (autoGenerateBtn) {
+    autoGenerateBtn.addEventListener('click', autoGenerateSchedule);
+  }
+  if (clearScheduleBtn) {
+    clearScheduleBtn.addEventListener('click', clearScheduleEditor);
   }
 }
 

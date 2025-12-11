@@ -56,8 +56,8 @@
     "unit": "g",
     "kcal": 3.04,
     "carb_per_unit": 0.82,
-    "protein_per_unit": 0.0,
-    "lipid_per_unit": 0.0
+    "protein_per_unit": 0,
+    "lipid_per_unit": 0
   },
   {
     "id": "firm-tofu",
@@ -95,9 +95,9 @@
     "category": "Fats & Oils",
     "unit": "g",
     "kcal": 9,
-    "carb_per_unit": 0.0,
-    "protein_per_unit": 0.0,
-    "lipid_per_unit": 1.0
+    "carb_per_unit": 0,
+    "protein_per_unit": 0,
+    "lipid_per_unit": 1
   },
   {
     "id": "soy-sauce",
@@ -107,7 +107,7 @@
     "kcal": 0.53,
     "carb_per_unit": 0.05,
     "protein_per_unit": 0.08,
-    "lipid_per_unit": 0.0
+    "lipid_per_unit": 0
   },
   {
     "id": "garlic",
@@ -187,7 +187,7 @@
     "kcal": 0.22,
     "carb_per_unit": 0.06,
     "protein_per_unit": 0.003,
-    "lipid_per_unit": 0.0
+    "lipid_per_unit": 0
   },
   {
     "id": "salt",
@@ -195,9 +195,9 @@
     "category": "Condiments",
     "unit": "g",
     "kcal": 0,
-    "carb_per_unit": 0.0,
-    "protein_per_unit": 0.0,
-    "lipid_per_unit": 0.0
+    "carb_per_unit": 0,
+    "protein_per_unit": 0,
+    "lipid_per_unit": 0
   },
   {
     "id": "brown-rice",
@@ -255,9 +255,9 @@
     "category": "Liquids",
     "unit": "ml",
     "kcal": 0,
-    "carb_per_unit": 0.0,
-    "protein_per_unit": 0.0,
-    "lipid_per_unit": 0.0
+    "carb_per_unit": 0,
+    "protein_per_unit": 0,
+    "lipid_per_unit": 0
   },
   {
     "id": "raw-almonds",
@@ -267,7 +267,7 @@
     "kcal": 5.75,
     "carb_per_unit": 0.22,
     "protein_per_unit": 0.21,
-    "lipid_per_unit": 0.50
+    "lipid_per_unit": 0.5
   },
   {
     "id": "salmon-fillet",
@@ -275,7 +275,7 @@
     "category": "Proteins",
     "unit": "g",
     "kcal": 2.08,
-    "carb_per_unit": 0.0,
+    "carb_per_unit": 0,
     "protein_per_unit": 0.2,
     "lipid_per_unit": 0.13
   },

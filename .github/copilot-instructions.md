@@ -9,13 +9,28 @@ A single-page vanilla JavaScript webapp for meal prep planning. No build tools, 
 - `index.html` - Single HTML file with all markup; uses semantic sections for tab panels
 - `main.js` - All application logic, data, and state management
 - `main.css` - Component-based CSS with CSS custom properties for theming
-- `specs.md` - Source of truth for all meal/nutrition data
+- `fileSystem.js` - File System Access API integration for syncing with `ingredients.json`
+- `dataStore.js` - Data storage and aggregation functions
+- `models.js` - Data model classes (FoodItem, Meal, etc.)
+- `data/ingredients.json` - Ingredients database (in `data/` folder to avoid dev server reloads)
 
 ### Data Flow
-1. **Source data**: All meals, schedules, and shopping lists are defined as JS objects at the top of `main.js` (derived from `specs.md`)
-2. **State**: Single `state` object holds `onboarded`, `startDay`, and `checkedItems`
-3. **Persistence**: State syncs to `localStorage` via `saveState()`/`loadState()`
-4. **Rendering**: Functions like `renderShoppingList()`, `renderSchedule()`, `renderMenuCards()` rebuild DOM from data
+1. **Ingredients**: 
+   - Loaded from `ingredients.json` via File System Access API (if connected)
+   - Falls back to `localStorage` if not connected
+   - Auto-saves modifications back to the connected file
+2. **Meals**: Stored in `localStorage`, can be imported/exported as JSON
+3. **State**: Single `state` object holds `onboarded`, `startDay`, and `checkedItems`
+4. **Persistence**: State syncs to `localStorage` via `saveState()`/`loadState()`
+5. **Rendering**: Functions like `renderShoppingList()`, `renderSchedule()`, `renderMenuCards()` rebuild DOM from data
+
+### File System Integration
+Uses the [File System Access API](https://developer.mozilla.org/en-US/docs/Web/API/File_System_API) for direct file read/write:
+- User selects `ingredients.json` via file picker (stored in IndexedDB)
+- All ingredient modifications automatically save to the file
+- File handle persists across sessions (requires permission re-grant)
+- Graceful fallback to `localStorage` for unsupported browsers
+- Settings page shows connection status and reconnect/disconnect options
 
 ### Navigation Pattern
 - Tab-based SPA using CSS class `.active` toggling

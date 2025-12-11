@@ -13,24 +13,80 @@
 <body>
     <!-- Onboarding Modal -->
     <div id="onboarding-modal" class="modal">
-        <div class="modal-content">
+        <div class="modal-content onboarding-content">
             <span class="material-symbols-rounded modal-icon">skillet</span>
             <h2>Welcome to Meal Prep</h2>
-            <p>Choose your preferred start day for your weekly meal plan.</p>
-            <div class="day-selector">
-                <label for="start-day">Start Day</label>
-                <select id="start-day">
-                    <option value="0">Sunday</option>
-                    <option value="1" selected>Monday</option>
-                    <option value="2">Tuesday</option>
-                    <option value="3">Wednesday</option>
-                    <option value="4">Thursday</option>
-                    <option value="5">Friday</option>
-                    <option value="6">Saturday</option>
-                </select>
+            <p>Tell us about yourself so we can calculate your calorie needs.</p>
+            
+            <div class="onboarding-form">
+                <div class="onboarding-section">
+                    <h3>Your Stats</h3>
+                    <div class="onboarding-grid">
+                        <label class="form-field">
+                            <span>Age*</span>
+                            <input type="number" id="onboarding-age" min="15" max="100" placeholder="e.g., 30">
+                        </label>
+                        <label class="form-field">
+                            <span>Sex*</span>
+                            <select id="onboarding-sex">
+                                <option value="male">Male</option>
+                                <option value="female">Female</option>
+                            </select>
+                        </label>
+                        <label class="form-field">
+                            <span>Weight (kg)*</span>
+                            <input type="number" id="onboarding-weight" min="30" max="300" step="0.1" placeholder="e.g., 75">
+                        </label>
+                        <label class="form-field">
+                            <span>Height (cm)*</span>
+                            <input type="number" id="onboarding-height" min="100" max="250" placeholder="e.g., 175">
+                        </label>
+                        <label class="form-field form-field-full">
+                            <span>Activity Level*</span>
+                            <select id="onboarding-activity">
+                                <option value="1.2">Sedentary (little/no exercise)</option>
+                                <option value="1.375">Lightly active (1-3 days/week)</option>
+                                <option value="1.55" selected>Moderately active (3-5 days/week)</option>
+                                <option value="1.725">Very active (6-7 days/week)</option>
+                                <option value="1.9">Extra active (physical job + training)</option>
+                            </select>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="onboarding-section">
+                    <h3>Your Goal</h3>
+                    <div class="onboarding-grid">
+                        <label class="form-field">
+                            <span>Goal Weight (kg)*</span>
+                            <input type="number" id="onboarding-goal-weight" min="30" max="300" step="0.1" placeholder="e.g., 70">
+                        </label>
+                        <label class="form-field">
+                            <span>Timeframe (months)*</span>
+                            <input type="number" id="onboarding-goal-months" min="1" max="24" placeholder="e.g., 3">
+                        </label>
+                    </div>
+                </div>
+
+                <div class="onboarding-section">
+                    <h3>Preferences</h3>
+                    <div class="day-selector">
+                        <label for="start-day">Week Start Day</label>
+                        <select id="start-day">
+                            <option value="0">Sunday</option>
+                            <option value="1" selected>Monday</option>
+                            <option value="2">Tuesday</option>
+                            <option value="3">Wednesday</option>
+                            <option value="4">Thursday</option>
+                            <option value="5">Friday</option>
+                            <option value="6">Saturday</option>
+                        </select>
+                    </div>
+                </div>
             </div>
+
             <button id="start-btn" class="btn btn-primary">
-                Get Started
+                Calculate & Get Started
                 <span class="material-symbols-rounded">arrow_forward</span>
             </button>
         </div>
@@ -94,13 +150,40 @@
             <section id="schedule-tab" class="tab-panel">
                 <div class="section-header">
                     <h1>Weekly Meal Schedule</h1>
-                    <div class="view-toggle">
-                        <button class="view-btn active" data-view="list" aria-label="List view">
-                            <span class="material-symbols-rounded">view_list</span>
+                    <div class="schedule-actions">
+                        <div class="view-toggle">
+                            <button class="view-btn active" data-view="list" aria-label="List view">
+                                <span class="material-symbols-rounded">view_list</span>
+                            </button>
+                            <button class="view-btn" data-view="calendar" aria-label="Calendar view">
+                                <span class="material-symbols-rounded">calendar_view_week</span>
+                            </button>
+                        </div>
+                        <button id="edit-schedule-btn" class="btn btn-primary">
+                            <span class="material-symbols-rounded">edit_calendar</span>
+                            Edit Schedule
                         </button>
-                        <button class="view-btn" data-view="calendar" aria-label="Calendar view">
-                            <span class="material-symbols-rounded">calendar_view_week</span>
-                        </button>
+                    </div>
+                </div>
+                <!-- Weekly Calorie Overview -->
+                <div id="schedule-overview" class="schedule-overview hidden">
+                    <div class="overview-stats">
+                        <div class="overview-stat">
+                            <span class="overview-label">Weekly Target</span>
+                            <span class="overview-value" id="overview-weekly-target">--</span>
+                        </div>
+                        <div class="overview-stat">
+                            <span class="overview-label">Scheduled</span>
+                            <span class="overview-value" id="overview-scheduled">--</span>
+                        </div>
+                        <div class="overview-stat overview-stat-highlight" id="overview-remaining-container">
+                            <span class="overview-label">Remaining</span>
+                            <span class="overview-value" id="overview-remaining">--</span>
+                        </div>
+                    </div>
+                    <div id="overview-cheat-day" class="overview-cheat-day hidden">
+                        <span class="material-symbols-rounded">celebration</span>
+                        <span>Cheat day (<span id="overview-cheat-day-name">--</span>): <strong id="overview-cheat-budget">0</strong> kcal available</span>
                     </div>
                 </div>
                 <div id="schedule-list" class="schedule-grid"></div>
@@ -145,6 +228,10 @@
                             Add Ingredient
                         </button>
                     </div>
+                </div>
+                <div class="search-container">
+                    <span class="material-symbols-rounded search-icon">search</span>
+                    <input type="text" id="ingredients-search" placeholder="Search ingredients..." class="search-input">
                 </div>
                 <div id="add-ingredient-form" class="ingredient-form hidden">
                     <div class="form-grid">
@@ -208,6 +295,42 @@
                 </button>
                 <h1>Settings</h1>
                 
+                <!-- Profile Card -->
+                <div class="settings-section">
+                    <h2>Your Profile</h2>
+                    <div class="profile-card" id="profile-card">
+                        <div class="profile-header">
+                            <span class="material-symbols-rounded profile-icon">person</span>
+                            <div class="profile-summary">
+                                <span class="profile-name" id="profile-stats-summary">--</span>
+                                <span class="profile-activity" id="profile-activity-label">--</span>
+                            </div>
+                        </div>
+                        <div class="profile-calories">
+                            <div class="calorie-stat">
+                                <span class="calorie-label">Maintenance</span>
+                                <span class="calorie-value" id="profile-maintenance">-- kcal</span>
+                            </div>
+                            <div class="calorie-stat calorie-stat-primary">
+                                <span class="calorie-label">Daily Target</span>
+                                <span class="calorie-value" id="profile-target">-- kcal</span>
+                            </div>
+                            <div class="calorie-stat">
+                                <span class="calorie-label">Deficit/Surplus</span>
+                                <span class="calorie-value" id="profile-difference">--</span>
+                            </div>
+                        </div>
+                        <div class="profile-goal">
+                            <span class="material-symbols-rounded">flag</span>
+                            <span id="profile-goal-text">No goal set</span>
+                        </div>
+                        <button id="edit-profile-btn" class="btn btn-secondary btn-block">
+                            <span class="material-symbols-rounded">edit</span>
+                            Edit Profile
+                        </button>
+                    </div>
+                </div>
+
                 <div class="settings-section">
                     <h2>Preferences</h2>
                     <div class="settings-content">
@@ -225,6 +348,32 @@
                                 <option value="5">Friday</option>
                                 <option value="6">Saturday</option>
                             </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="settings-section">
+                    <h2>File System</h2>
+                    <div class="settings-content">
+                        <div class="setting-item">
+                            <div class="setting-info">
+                                <span class="setting-label">Ingredients Database</span>
+                                <span class="setting-description" id="file-status">Connect to ingredients.json file for automatic sync</span>
+                            </div>
+                            <button id="connect-ingredients-file" class="btn btn-primary">
+                                <span class="material-symbols-rounded">attach_file</span>
+                                Select File
+                            </button>
+                        </div>
+                        <div class="setting-item" id="disconnect-file-item" style="display: none;">
+                            <div class="setting-info">
+                                <span class="setting-label">Disconnect File</span>
+                                <span class="setting-description">Stop syncing with ingredients.json</span>
+                            </div>
+                            <button id="disconnect-ingredients-file" class="btn btn-secondary">
+                                <span class="material-symbols-rounded">link_off</span>
+                                Disconnect
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -455,6 +604,129 @@
                     Save Changes
                 </button>
                 <button id="cancel-edit-ingredient" class="btn btn-secondary" type="button">
+                    <span class="material-symbols-rounded">close</span>
+                    Cancel
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Profile Modal -->
+    <div id="edit-profile-modal" class="modal hidden">
+        <div class="modal-content edit-profile-modal-content">
+            <h2>Edit Profile</h2>
+            <div class="onboarding-form">
+                <div class="onboarding-section">
+                    <h3>Your Stats</h3>
+                    <div class="onboarding-grid">
+                        <label class="form-field">
+                            <span>Age*</span>
+                            <input type="number" id="edit-profile-age" min="15" max="100" placeholder="e.g., 30">
+                        </label>
+                        <label class="form-field">
+                            <span>Sex*</span>
+                            <select id="edit-profile-sex">
+                                <option value="male">Male</option>
+                                <option value="female">Female</option>
+                            </select>
+                        </label>
+                        <label class="form-field">
+                            <span>Weight (kg)*</span>
+                            <input type="number" id="edit-profile-weight" min="30" max="300" step="0.1" placeholder="e.g., 75">
+                        </label>
+                        <label class="form-field">
+                            <span>Height (cm)*</span>
+                            <input type="number" id="edit-profile-height" min="100" max="250" placeholder="e.g., 175">
+                        </label>
+                        <label class="form-field form-field-full">
+                            <span>Activity Level*</span>
+                            <select id="edit-profile-activity">
+                                <option value="1.2">Sedentary (little/no exercise)</option>
+                                <option value="1.375">Lightly active (1-3 days/week)</option>
+                                <option value="1.55" selected>Moderately active (3-5 days/week)</option>
+                                <option value="1.725">Very active (6-7 days/week)</option>
+                                <option value="1.9">Extra active (physical job + training)</option>
+                            </select>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="onboarding-section">
+                    <h3>Your Goal</h3>
+                    <div class="onboarding-grid">
+                        <label class="form-field">
+                            <span>Goal Weight (kg)*</span>
+                            <input type="number" id="edit-profile-goal-weight" min="30" max="300" step="0.1" placeholder="e.g., 70">
+                        </label>
+                        <label class="form-field">
+                            <span>Timeframe (months)*</span>
+                            <input type="number" id="edit-profile-goal-months" min="1" max="24" placeholder="e.g., 3">
+                        </label>
+                    </div>
+                </div>
+            </div>
+            <div class="form-actions">
+                <button id="save-edit-profile" class="btn btn-primary">
+                    <span class="material-symbols-rounded">save</span>
+                    Save Changes
+                </button>
+                <button id="cancel-edit-profile" class="btn btn-secondary" type="button">
+                    <span class="material-symbols-rounded">close</span>
+                    Cancel
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Schedule Modal -->
+    <div id="edit-schedule-modal" class="modal hidden">
+        <div class="modal-content edit-schedule-modal-content">
+            <h2>Edit Weekly Schedule</h2>
+            <div class="schedule-editor">
+                <div class="schedule-editor-actions">
+                    <button id="auto-generate-schedule" class="btn btn-secondary">
+                        <span class="material-symbols-rounded">auto_awesome</span>
+                        Auto-Generate
+                    </button>
+                    <button id="clear-schedule" class="btn btn-secondary">
+                        <span class="material-symbols-rounded">delete_sweep</span>
+                        Clear All
+                    </button>
+                </div>
+                <div id="schedule-editor-grid" class="schedule-editor-grid">
+                    <!-- Days will be rendered here -->
+                </div>
+                <div id="schedule-calorie-summary" class="schedule-calorie-summary">
+                    <div class="calorie-summary-row">
+                        <div class="calorie-summary-item">
+                            <span class="calorie-summary-label">Weekly Target</span>
+                            <span class="calorie-summary-value" id="schedule-weekly-target">-- kcal</span>
+                        </div>
+                        <div class="calorie-summary-item">
+                            <span class="calorie-summary-label">Scheduled Total</span>
+                            <span class="calorie-summary-value" id="schedule-total-calories">-- kcal</span>
+                        </div>
+                        <div class="calorie-summary-item">
+                            <span class="calorie-summary-label">Remaining</span>
+                            <span class="calorie-summary-value" id="schedule-remaining-calories">-- kcal</span>
+                        </div>
+                    </div>
+                    <div id="schedule-calorie-warning" class="calorie-warning hidden">
+                        <span class="material-symbols-rounded">warning</span>
+                        <span class="warning-text">Exceeds weekly target!</span>
+                    </div>
+                    <div id="schedule-cheat-day-info" class="cheat-day-info hidden">
+                        <span class="material-symbols-rounded">celebration</span>
+                        <span class="cheat-day-text">Cheat day budget: <strong id="cheat-day-budget">0</strong> kcal</span>
+                    </div>
+                </div>
+            </div>
+            <div class="form-actions">
+                <button id="save-schedule" class="btn btn-primary">
+                    <span class="material-symbols-rounded">save</span>
+                    Save Schedule
+                </button>
+                <button id="cancel-schedule" class="btn btn-secondary" type="button">
                     <span class="material-symbols-rounded">close</span>
                     Cancel
                 </button>
