@@ -21,13 +21,13 @@
   },
   {
     "id": "protein-powder",
-    "name": "Protein powder",
+    "name": "Lazar Whey Concentrate",
     "category": "Supplements",
-    "unit": "g",
-    "kcal": 4,
-    "carb_per_unit": 0.08,
-    "protein_per_unit": 0.8,
-    "lipid_per_unit": 0.015
+    "unit": "scoop",
+    "kcal": 112,
+    "carb_per_unit": 3.6,
+    "protein_per_unit": 23,
+    "lipid_per_unit": 0.75
   },
   {
     "id": "mixed-berries",

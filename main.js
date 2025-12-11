@@ -838,7 +838,7 @@ function renderScheduleCalendar() {
   }
 
   const calendarHTML = `
-    <div class="calendar-grid">
+    <div class="calendar-grid" style="--calendar-days: ${schedule.length}">
       <div class="calendar-column time-column">
         <div class="calendar-time-label"></div>
         <div class="calendar-time-label">7:00 AM</div>
@@ -848,10 +848,20 @@ function renderScheduleCalendar() {
       </div>
       ${schedule.map((day, i) => {
         const slots = Array.isArray(day.slots) ? day.slots : [];
+        const isCheatDay = day.isCheatDay || false;
+        const columnClasses = ['calendar-column'];
+        if (i === currentDayIndex) columnClasses.push('current-day-column');
+        if (isCheatDay) columnClasses.push('cheat-column');
+        
         return `
-          <div class="calendar-column${i === currentDayIndex ? ' current-day-column' : ''}">
-            <div class="calendar-day-header">Day ${i + 1}<br><span>${days[i]}</span></div>
-            ${['breakfast', 'lunch', 'snack', 'dinner'].map(slotKey => {
+          <div class="${columnClasses.join(' ')}">
+            <div class="calendar-day-header${isCheatDay ? ' cheat-day' : ''}">Day ${i + 1}<br><span>${days[i]}</span></div>
+            ${isCheatDay ? `
+              <div class="calendar-cell cheat-cell">🎉</div>
+              <div class="calendar-cell cheat-cell">🎉</div>
+              <div class="calendar-cell cheat-cell">🎉</div>
+              <div class="calendar-cell cheat-cell">🎉</div>
+            ` : ['breakfast', 'lunch', 'snack', 'dinner'].map(slotKey => {
               const slot = slots.find(s => s.slot === slotKey) || {};
               const meal = getMealById(slot.mealId);
               const classes = ['calendar-cell'];
@@ -865,13 +875,6 @@ function renderScheduleCalendar() {
           </div>
         `;
       }).join('')}
-      <div class="calendar-column cheat-column">
-        <div class="calendar-day-header cheat-day">Cheat Day</div>
-        <div class="calendar-cell cheat-cell">🎉</div>
-        <div class="calendar-cell cheat-cell">🎉</div>
-        <div class="calendar-cell cheat-cell">🎉</div>
-        <div class="calendar-cell cheat-cell">🎉</div>
-      </div>
     </div>
   `;
 
@@ -1073,6 +1076,13 @@ function filterIngredients(query) {
     const ingredient = dataStore.ingredients.find(i => i.id === ingredientId);
     const searchText = ingredient ? `${ingredient.name} ${ingredient.category || ''}`.toLowerCase() : '';
     card.style.display = searchText.includes(lowerQuery) ? '' : 'none';
+  });
+
+  // Hide/show categories based on whether they have visible items
+  const categories = ingredientsList.querySelectorAll('.ingredient-category');
+  categories.forEach(category => {
+    const visibleCards = category.querySelectorAll('.ingredient-card:not([style*="display: none"])');
+    category.style.display = visibleCards.length > 0 ? '' : 'none';
   });
 }
 
@@ -1356,10 +1366,18 @@ async function handleIngredientsImport(event) {
     if (!cleaned.length) {
       showToast('No valid ingredients found in file', 'error');
     } else {
-      setIngredients(cleaned);
-      await saveIngredients();
-      renderIngredients();
-      showToast(`Imported ${cleaned.length} ingredient${cleaned.length === 1 ? '' : 's'}`, 'success');
+      // Merge with existing ingredients, avoiding duplicates by ID
+      const existingIds = new Set(dataStore.ingredients.map(ing => ing.id));
+      const newIngredients = cleaned.filter(ing => !existingIds.has(ing.id));
+      
+      if (newIngredients.length === 0) {
+        showToast('All ingredients already exist', 'default');
+      } else {
+        dataStore.ingredients = [...dataStore.ingredients, ...newIngredients];
+        await saveIngredients();
+        renderIngredients();
+        showToast(`Imported ${newIngredients.length} new ingredient${newIngredients.length === 1 ? '' : 's'}`, 'success');
+      }
     }
   } catch (err) {
     console.error('Failed to import ingredients', err);
