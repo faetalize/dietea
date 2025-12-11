@@ -38,6 +38,9 @@
 
     <!-- Main App Container -->
     <div id="app" class="hidden">
+        <!-- Toast Container -->
+        <div id="toast-container" class="toast-container"></div>
+
         <!-- Navigation Tabs -->
         <nav class="tab-nav">
             <div class="tab-buttons">
@@ -106,7 +109,20 @@
 
             <!-- Menu Tab -->
             <section id="menu-tab" class="tab-panel">
-                <h1>Meal Menu</h1>
+                <div class="section-header">
+                    <h1>Meal Menu</h1>
+                    <div class="import-actions">
+                        <input type="file" id="meals-file" accept="application/json" class="hidden">
+                        <button id="import-meals" class="btn btn-secondary">
+                            <span class="material-symbols-rounded">upload_file</span>
+                            Import JSON
+                        </button>
+                        <button id="create-meal-btn" class="btn btn-primary">
+                            <span class="material-symbols-rounded">add</span>
+                            Create Meal
+                        </button>
+                    </div>
+                </div>
                 <div class="search-container">
                     <span class="material-symbols-rounded search-icon">search</span>
                     <input type="text" id="menu-search" placeholder="Search meals..." class="search-input">
@@ -138,7 +154,7 @@
                         </label>
                         <label class="form-field">
                             <span>Category</span>
-                            <input type="text" id="ingredient-category" placeholder="e.g., Herbs">
+                            <input type="text" id="ingredient-category" placeholder="e.g., Herbs" list="category-options">
                         </label>
                         <label class="form-field">
                             <span>Unit*</span>
@@ -191,11 +207,259 @@
                     Back
                 </button>
                 <h1>Settings</h1>
-                <div class="settings-content">
-                    <p class="settings-empty">No settings available yet.</p>
+                
+                <div class="settings-section">
+                    <h2>Preferences</h2>
+                    <div class="settings-content">
+                        <div class="setting-item">
+                            <div class="setting-info">
+                                <span class="setting-label">Week Start Day</span>
+                                <span class="setting-description">Choose which day your meal prep week begins</span>
+                            </div>
+                            <select id="settings-start-day" class="setting-select">
+                                <option value="0">Sunday</option>
+                                <option value="1">Monday</option>
+                                <option value="2">Tuesday</option>
+                                <option value="3">Wednesday</option>
+                                <option value="4">Thursday</option>
+                                <option value="5">Friday</option>
+                                <option value="6">Saturday</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="settings-section">
+                    <h2>Data Management</h2>
+                    <div class="settings-content">
+                        <div class="setting-item">
+                            <div class="setting-info">
+                                <span class="setting-label">Clear Shopping Checklist</span>
+                                <span class="setting-description">Reset all checked items in the shopping list</span>
+                            </div>
+                            <div class="setting-action-wrapper">
+                                <button id="clear-shopping-data" class="btn btn-secondary">
+                                    <span class="material-symbols-rounded">remove_shopping_cart</span>
+                                    Clear
+                                </button>
+                                <div class="setting-confirm">
+                                    <button class="btn-icon btn-cancel" data-action="cancel" aria-label="Cancel">
+                                        <span class="material-symbols-rounded">close</span>
+                                    </button>
+                                    <button class="btn-icon btn-confirm" data-action="confirm" aria-label="Confirm">
+                                        <span class="material-symbols-rounded">check</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="setting-item">
+                            <div class="setting-info">
+                                <span class="setting-label">Delete All Ingredients</span>
+                                <span class="setting-description">Remove all ingredients from the database</span>
+                            </div>
+                            <div class="setting-action-wrapper">
+                                <button id="delete-ingredients-data" class="btn btn-secondary btn-danger-hover">
+                                    <span class="material-symbols-rounded">delete_sweep</span>
+                                    Delete
+                                </button>
+                                <div class="setting-confirm">
+                                    <button class="btn-icon btn-cancel" data-action="cancel" aria-label="Cancel">
+                                        <span class="material-symbols-rounded">close</span>
+                                    </button>
+                                    <button class="btn-icon btn-confirm" data-action="confirm" aria-label="Confirm">
+                                        <span class="material-symbols-rounded">check</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="setting-item setting-item-danger">
+                            <div class="setting-info">
+                                <span class="setting-label">Delete All Data</span>
+                                <span class="setting-description">Remove all app data and reset to initial state</span>
+                            </div>
+                            <div class="setting-action-wrapper">
+                                <button id="delete-all-data" class="btn btn-danger">
+                                    <span class="material-symbols-rounded">warning</span>
+                                    Delete Everything
+                                </button>
+                                <div class="setting-confirm">
+                                    <button class="btn-icon btn-cancel" data-action="cancel" aria-label="Cancel">
+                                        <span class="material-symbols-rounded">close</span>
+                                    </button>
+                                    <button class="btn-icon btn-confirm" data-action="confirm" aria-label="Confirm">
+                                        <span class="material-symbols-rounded">check</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </section>
         </main>
+    </div>
+
+    <!-- Category datalist for autocomplete -->
+    <datalist id="category-options"></datalist>
+
+    <!-- Create Meal Modal -->
+    <div id="create-meal-modal" class="modal hidden">
+        <div class="modal-content create-meal-modal-content">
+            <h2>Create New Meal</h2>
+            <div class="meal-form">
+                <div class="form-row">
+                    <label class="form-field form-field-grow">
+                        <span>Meal Name*</span>
+                        <input type="text" id="meal-name" placeholder="e.g., Grilled Chicken Salad">
+                    </label>
+                    <label class="form-field">
+                        <span>Type*</span>
+                        <select id="meal-type">
+                            <option value="Breakfast">Breakfast</option>
+                            <option value="Lunch">Lunch</option>
+                            <option value="Snack">Snack</option>
+                            <option value="Dinner">Dinner</option>
+                        </select>
+                    </label>
+                </div>
+
+                <div class="meal-ingredients-section">
+                    <div class="section-label">
+                        <span>Ingredients*</span>
+                        <button type="button" id="add-meal-ingredient" class="btn-icon-small">
+                            <span class="material-symbols-rounded">add</span>
+                        </button>
+                    </div>
+                    <div id="meal-ingredients-list" class="meal-ingredients-list">
+                        <p class="empty-state-small">No ingredients added yet</p>
+                    </div>
+                </div>
+
+                <div class="meal-instructions-section">
+                    <div class="section-label">
+                        <span>Instructions (optional)</span>
+                        <button type="button" id="add-instruction-block" class="btn-icon-small">
+                            <span class="material-symbols-rounded">add</span>
+                        </button>
+                    </div>
+                    <div id="meal-instructions-list" class="meal-instructions-list">
+                        <p class="empty-state-small">No instruction blocks added yet</p>
+                    </div>
+                </div>
+            </div>
+            <div class="form-actions">
+                <button id="save-meal" class="btn btn-primary">
+                    <span class="material-symbols-rounded">save</span>
+                    Save Meal
+                </button>
+                <button id="cancel-meal" class="btn btn-secondary" type="button">
+                    <span class="material-symbols-rounded">close</span>
+                    Cancel
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Instruction Block Modal -->
+    <div id="add-instruction-modal" class="modal hidden">
+        <div class="modal-content add-instruction-modal-content">
+            <h2>Add Instruction Block</h2>
+            <div class="instruction-form">
+                <label class="form-field">
+                    <span>Block Name*</span>
+                    <input type="text" id="instruction-block-name" placeholder="e.g., Marinade, Sauce, Assembly">
+                </label>
+                <label class="form-field">
+                    <span>Steps (one per line)*</span>
+                    <textarea id="instruction-block-steps" rows="5" placeholder="Step 1...&#10;Step 2...&#10;Step 3..."></textarea>
+                </label>
+            </div>
+            <div class="form-actions">
+                <button id="confirm-add-instruction" class="btn btn-primary">
+                    <span class="material-symbols-rounded">add</span>
+                    Add Block
+                </button>
+                <button id="cancel-add-instruction" class="btn btn-secondary" type="button">
+                    <span class="material-symbols-rounded">close</span>
+                    Cancel
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Ingredient to Meal Modal -->
+    <div id="add-ingredient-modal" class="modal hidden">
+        <div class="modal-content add-ingredient-modal-content">
+            <h2>Add Ingredient</h2>
+            <div class="form-grid">
+                <label class="form-field">
+                    <span>Ingredient*</span>
+                    <select id="select-ingredient">
+                        <option value="">Select an ingredient...</option>
+                    </select>
+                </label>
+                <label class="form-field">
+                    <span>Quantity*</span>
+                    <input type="number" id="ingredient-quantity" step="0.1" min="0" placeholder="e.g., 100">
+                </label>
+            </div>
+            <div class="form-actions">
+                <button id="confirm-add-ingredient" class="btn btn-primary">
+                    <span class="material-symbols-rounded">add</span>
+                    Add
+                </button>
+                <button id="cancel-add-ingredient" class="btn btn-secondary" type="button">
+                    <span class="material-symbols-rounded">close</span>
+                    Cancel
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Ingredient Modal -->
+    <div id="edit-ingredient-modal" class="modal hidden">
+        <div class="modal-content edit-ingredient-modal-content">
+            <h2>Edit Ingredient</h2>
+            <div class="form-grid">
+                <label class="form-field">
+                    <span>Name*</span>
+                    <input type="text" id="edit-ingredient-name" placeholder="e.g., Fresh basil">
+                </label>
+                <label class="form-field">
+                    <span>Category</span>
+                    <input type="text" id="edit-ingredient-category" placeholder="e.g., Herbs" list="category-options">
+                </label>
+                <label class="form-field">
+                    <span>Unit*</span>
+                    <input type="text" id="edit-ingredient-unit" placeholder="g, ml, piece">
+                </label>
+                <label class="form-field">
+                    <span>kcal per unit</span>
+                    <input type="number" step="0.01" id="edit-ingredient-kcal" placeholder="e.g., 0.5">
+                </label>
+                <label class="form-field">
+                    <span>Protein per unit (g)</span>
+                    <input type="number" step="0.01" id="edit-ingredient-protein" placeholder="e.g., 0.03">
+                </label>
+                <label class="form-field">
+                    <span>Carbs per unit (g)</span>
+                    <input type="number" step="0.01" id="edit-ingredient-carbs" placeholder="e.g., 0.1">
+                </label>
+                <label class="form-field">
+                    <span>Lipids per unit (g)</span>
+                    <input type="number" step="0.01" id="edit-ingredient-lipids" placeholder="e.g., 0.02">
+                </label>
+            </div>
+            <div class="form-actions">
+                <button id="save-edit-ingredient" class="btn btn-primary">
+                    <span class="material-symbols-rounded">save</span>
+                    Save Changes
+                </button>
+                <button id="cancel-edit-ingredient" class="btn btn-secondary" type="button">
+                    <span class="material-symbols-rounded">close</span>
+                    Cancel
+                </button>
+            </div>
+        </div>
     </div>
 
     <script type="module" src="main.js"></script>

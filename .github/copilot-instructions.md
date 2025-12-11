@@ -63,5 +63,93 @@ A single-page vanilla JavaScript webapp for meal prep planning. No build tools, 
 2. Add section `#newtab-tab` with class `tab-panel`
 3. Add render function and call it in `showApp()`
 
+## UX Patterns
+
+### User Feedback - No JS Alerts/Confirms
+Never use `alert()` or `confirm()`. Instead:
+
+#### Toast Notifications
+For non-blocking feedback (success messages, errors):
+```javascript
+showToast('Ingredient added', 'success');  // green
+showToast('Invalid JSON file', 'error');   // red
+showToast('Info message', 'default');      // dark
+```
+Toasts auto-dismiss after 3 seconds. Container is `#toast-container`.
+
+#### Inline Form Validation
+For required field errors, highlight the field instead of alerting:
+```javascript
+showFieldError(inputElement, 'Name is required');
+clearValidationErrors(containerElement);
+```
+Adds `.error` class to `.form-field`, shows `.error-message` span.
+
+### Action Confirmation - Inline Button Swap
+For destructive actions (delete, reset, clear data), use inline confirmation instead of `confirm()`:
+
+#### HTML Pattern
+```html
+<div class="setting-action-wrapper">  <!-- or .reset-wrapper, .ingredient-card-actions -->
+  <button id="action-btn" class="btn btn-secondary">Delete</button>
+  <div class="setting-confirm">  <!-- or .reset-confirm, .delete-confirm -->
+    <button class="btn-icon btn-cancel" data-action="cancel">
+      <span class="material-symbols-rounded">close</span>
+    </button>
+    <button class="btn-icon btn-confirm" data-action="confirm">
+      <span class="material-symbols-rounded">check</span>
+    </button>
+  </div>
+</div>
+```
+
+#### CSS Pattern
+Wrapper uses `overflow: hidden`. On `.confirming` class:
+- Original button slides left with `transform: translateX(-100%)` and `opacity: 0`
+- Confirm buttons slide in from right with `transform: translateX(0)`
+
+#### JS Pattern
+```javascript
+// Simple setup
+button.addEventListener('click', () => wrapper.classList.add('confirming'));
+cancelBtn.addEventListener('click', () => wrapper.classList.remove('confirming'));
+confirmBtn.addEventListener('click', () => {
+  wrapper.classList.remove('confirming');
+  performDestructiveAction();
+});
+
+// Or use helper for settings page
+setupDestructiveAction(button, () => { /* action */ });
+```
+
+#### When to Use
+- **Non-destructive**: Just do it, show success toast
+- **Destructive/irreversible**: Inline button swap confirmation, then success toast
+
+### Action Buttons Visibility
+Edit and delete buttons on cards (meals, ingredients) must **always be visible**—never hidden behind hover states.
+
+#### Why
+- Hover states don't work on touch devices (mobile, tablet)
+- Hidden UI makes the app unusable for mobile users
+- Action buttons are a core part of the UI, not progressive disclosure
+
+#### CSS Pattern
+```css
+/* CORRECT - always visible */
+.card-actions .btn-icon {
+    background: var(--surface);
+    border: 1px solid var(--border-light);
+}
+
+/* WRONG - don't do this */
+.card-actions .btn-icon {
+    opacity: 0;  /* Hidden by default */
+}
+.card:hover .card-actions .btn-icon {
+    opacity: 1;  /* Only visible on hover */
+}
+```
+
 ## Testing
 Open `index.html` directly in browser. Use DevTools Application tab to inspect localStorage (`mealPrepState`). Clear localStorage to reset onboarding.
