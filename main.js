@@ -1,11 +1,13 @@
 /**
  * Meal Prep Planner - Main Entry Point
- * Refactored modular structure
+ * Fully refactored modular structure
  */
 
 // Core data and models
-import { dataStore, setIngredients, setMeals, setSchedule } from './dataStore.js';
-import { Meal, FoodItem } from './models.js';
+import { dataStore, setIngredients, setMeals, setSchedule, aggregateShoppingList, getMealById } from './js/core/dataStore.js';
+import { Meal, FoodItem } from './js/core/models.js';
+import { loadIngredients } from './js/core/dataLoader.js';
+import { hydrateMeal } from './js/core/mealSerde.js';
 import { 
   isFileSystemSupported, 
   selectIngredientsFile, 
@@ -13,10 +15,10 @@ import {
   restoreFileHandle,
   getFileHandle,
   hasStoredFileHandle
-} from './fileSystem.js';
+} from './js/services/fileSystem.js';
 
 // Services
-import { state, loadState, saveState, updateProfile } from './js/services/state.js';
+import { state, loadState, saveState, updateProfile, updateState } from './js/services/state.js';
 import { calculateProfileMetrics } from './js/services/calories.js';
 import { saveIngredients, saveMeals, saveSchedule } from './js/services/storage.js';
 
@@ -26,10 +28,16 @@ import { showToast, showFieldError, clearValidationErrors } from './js/utils/fee
 // Components
 import { renderShoppingList, resetShoppingList } from './js/components/shopping.js';
 import { renderSchedule, scrollToCurrentDay } from './js/components/schedule.js';
+import { switchTab, savePreviousTab, getPreviousTab, showMealDetail, setupMealDetailNavigation } from './js/components/navigation.js';
+import { renderScheduleOverview, setupScheduleListeners } from './js/components/scheduleEditor.js';
+import { renderMenuCards, filterMenuCards, setupMenuListeners } from './js/components/menu.js';
+import { setupMealCreationListeners } from './js/components/mealCreation.js';
+import { renderIngredients, filterIngredients, setupIngredientsListeners } from './js/components/ingredients.js';
+import { setupSettingsListeners } from './js/components/settings.js';
+import { renderProfileCard, setupProfileListeners } from './js/components/profile.js';
 
-// Import the legacy main.js functions temporarily
-// We'll gradually migrate these
-import './main.legacy.js';
+// Legacy file - for temporary delegation of unmigrated functions
+// (legacy file removed after full migration)
 
 /**
  * Initialize the application
@@ -83,7 +91,15 @@ async function bootstrapData() {
         setIngredients([]);
       }
     } else {
-      setIngredients([]);
+      // Final fallback: load bundled ingredients.json on first run
+      try {
+        const items = await loadIngredients();
+        setIngredients(items);
+        ingredientsLoaded = true;
+      } catch (err) {
+        console.warn('Could not load bundled ingredients.json', err);
+        setIngredients([]);
+      }
     }
   }
 
@@ -92,7 +108,9 @@ async function bootstrapData() {
   if (savedMeals) {
     try {
       const parsed = JSON.parse(savedMeals);
-      const meals = Array.isArray(parsed) ? parsed.map(obj => hydrateMeal(obj)) : [];
+      const meals = Array.isArray(parsed)
+        ? parsed.map(obj => hydrateMeal(obj))
+        : [];
       setMeals(meals);
     } catch (err) {
       console.error('Failed to load saved meals', err);
@@ -115,11 +133,6 @@ async function bootstrapData() {
   } else {
     setSchedule([]);
   }
-}
-
-// Hydrate meal from plain object (imported temporarily from legacy)
-function hydrateMeal(obj) {
-  return new Meal(obj);
 }
 
 /**
@@ -166,11 +179,10 @@ function showApp() {
   // Render all components
   renderShoppingList();
   renderSchedule();
-  // TODO: Import and use these from modules
-  if (window.renderScheduleOverview) window.renderScheduleOverview();
-  if (window.renderMenuCards) window.renderMenuCards();
-  if (window.renderIngredients) window.renderIngredients();
-  if (window.renderProfileCard) window.renderProfileCard();
+  renderScheduleOverview();
+  renderMenuCards();
+  renderIngredients();
+  renderProfileCard();
 }
 
 /**
@@ -187,7 +199,7 @@ function setupEventListeners() {
   tabBtns.forEach(btn => {
     btn.addEventListener('click', () => {
       const tabId = btn.dataset.tab;
-      if (window.switchTab) window.switchTab(tabId);
+      switchTab(tabId);
     });
   });
   
@@ -211,12 +223,13 @@ function setupEventListeners() {
     showToast('Shopping list reset', 'success');
   });
   
-  // Delegate to legacy setup for now
-  // TODO: Migrate these to modular event handlers
-  if (window.setupSettingsListeners) window.setupSettingsListeners();
-  if (window.setupProfileListeners) window.setupProfileListeners();
-  if (window.setupScheduleListeners) window.setupScheduleListeners();
-  if (window.setupMealCreationListeners) window.setupMealCreationListeners();
+  setupSettingsListeners();
+  setupProfileListeners();
+  setupScheduleListeners();
+  setupMealCreationListeners();
+  setupMenuListeners();
+  setupIngredientsListeners();
+  setupMealDetailNavigation();
   
   setupSearchListeners();
   setupScheduleViewListeners();
@@ -280,9 +293,7 @@ async function handleOnboardingSubmit() {
     });
   }
   
-  state.startDay = parseInt(startDaySelect.value, 10);
-  state.onboarded = true;
-  saveState();
+  updateState({ startDay: parseInt(startDaySelect.value, 10), onboarded: true });
   
   showApp();
   
@@ -296,21 +307,7 @@ async function handleOnboardingSubmit() {
   // Prompt to connect ingredients file if supported
   if (isFileSystemSupported() && !getFileHandle() && dataStore.ingredients.length === 0) {
     setTimeout(async () => {
-      const shouldConnect = confirm('Would you like to connect to your ingredients.json file? This will enable automatic syncing of ingredient changes.');
-      if (shouldConnect) {
-        const fileHandle = await selectIngredientsFile();
-        if (fileHandle) {
-          const ingredientsData = await loadIngredientsFromFile(fileHandle);
-          if (ingredientsData && Array.isArray(ingredientsData)) {
-            const items = ingredientsData.map(obj => new FoodItem(obj));
-            setIngredients(items);
-            if (window.renderIngredients) window.renderIngredients();
-            showToast('Connected to ingredients.json', 'success');
-          } else {
-            showToast('Invalid ingredients file', 'error');
-          }
-        }
-      }
+      showToast('Tip: Connect ingredients.json from Settings to enable auto-sync.', 'default');
     }, 500);
   }
 }
@@ -322,12 +319,12 @@ function setupSearchListeners() {
   const menuSearch = document.getElementById('menu-search');
   const ingredientsSearch = document.getElementById('ingredients-search');
   
-  if (menuSearch && window.filterMenuCards) {
-    menuSearch.addEventListener('input', (e) => window.filterMenuCards(e.target.value));
+  if (menuSearch) {
+    menuSearch.addEventListener('input', (e) => filterMenuCards(e.target.value));
   }
   
-  if (ingredientsSearch && window.filterIngredients) {
-    ingredientsSearch.addEventListener('input', (e) => window.filterIngredients(e.target.value));
+  if (ingredientsSearch) {
+    ingredientsSearch.addEventListener('input', (e) => filterIngredients(e.target.value));
   }
 }
 
@@ -355,6 +352,21 @@ function setupScheduleViewListeners() {
       }
     });
   });
+
+  const handleMealClick = (e) => {
+    const mealElement = e.target.closest('[data-meal-id]');
+    if (mealElement) {
+      const mealId = mealElement.dataset.mealId;
+      const meal = getMealById(mealId);
+      if (meal) {
+        switchTab('menu');
+        showMealDetail(mealId);
+      }
+    }
+  };
+
+  scheduleList.addEventListener('click', handleMealClick);
+  scheduleCalendar.addEventListener('click', handleMealClick);
 }
 
 /**
@@ -366,24 +378,24 @@ function setupSettingsNavigation() {
   const settingsTab = document.getElementById('settings-tab');
   const tabBtns = document.querySelectorAll('.tab-btn');
   const tabPanels = document.querySelectorAll('.tab-panel');
-  let previousTab = 'shopping';
   
-  settingsBtn.addEventListener('click', () => {
-    const activeTab = document.querySelector('.tab-btn.active');
-    if (activeTab) {
-      previousTab = activeTab.dataset.tab;
-    }
-    tabBtns.forEach(btn => btn.classList.remove('active'));
-    tabPanels.forEach(panel => panel.classList.remove('active'));
-    settingsTab.classList.add('active');
-    settingsBtn.classList.add('active');
-  });
+  if (settingsBtn) {
+    settingsBtn.addEventListener('click', () => {
+      savePreviousTab();
+      tabBtns.forEach(btn => btn.classList.remove('active'));
+      tabPanels.forEach(panel => panel.classList.remove('active'));
+      settingsTab.classList.add('active');
+      settingsBtn.classList.add('active');
+    });
+  }
 
-  backFromSettingsBtn.addEventListener('click', () => {
-    settingsTab.classList.remove('active');
-    settingsBtn.classList.remove('active');
-    if (window.switchTab) window.switchTab(previousTab);
-  });
+  if (backFromSettingsBtn) {
+    backFromSettingsBtn.addEventListener('click', () => {
+      settingsTab.classList.remove('active');
+      if (settingsBtn) settingsBtn.classList.remove('active');
+      switchTab(getPreviousTab());
+    });
+  }
 }
 
 // Initialize on DOM load

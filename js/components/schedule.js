@@ -3,7 +3,7 @@
  * Renders schedule list, calendar, and overview
  */
 
-import { dataStore, getMealById } from '../../dataStore.js';
+import { dataStore, getMealById } from '../core/dataStore.js';
 import { state } from '../services/state.js';
 import { titleCase, defaultTimeForSlot, DAY_NAMES } from '../utils/helpers.js';
 

@@ -3,12 +3,13 @@
  * Handles data persistence for ingredients, meals, and schedule
  */
 
-import { dataStore } from '../../dataStore.js';
+import { dataStore } from '../core/dataStore.js';
+import { serializeMeal } from '../core/mealSerde.js';
 import { 
   isFileSystemSupported, 
   saveIngredientsToFile, 
   getFileHandle 
-} from '../../fileSystem.js';
+} from './fileSystem.js';
 
 /**
  * Save ingredients to file system or localStorage
@@ -36,7 +37,7 @@ export async function saveIngredients() {
  * Save meals to localStorage
  */
 export function saveMeals() {
-  localStorage.setItem('mealPrepMeals', JSON.stringify(dataStore.meals));
+  localStorage.setItem('mealPrepMeals', JSON.stringify(dataStore.meals.map(serializeMeal)));
 }
 
 /**
