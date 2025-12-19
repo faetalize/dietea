@@ -51,11 +51,21 @@
   },
   {
     "id": "honey",
-    "name": "Honey/maple/stevia",
+    "name": "Honey / maple syrup",
     "category": "Sweeteners",
     "unit": "g",
     "kcal": 3.04,
     "carb_per_unit": 0.82,
+    "protein_per_unit": 0,
+    "lipid_per_unit": 0
+  },
+  {
+    "id": "stevia",
+    "name": "Stevia (zero-calorie sweetener)",
+    "category": "Sweeteners",
+    "unit": "g",
+    "kcal": 0,
+    "carb_per_unit": 0,
     "protein_per_unit": 0,
     "lipid_per_unit": 0
   },
