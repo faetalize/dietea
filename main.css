@@ -435,15 +435,20 @@ body {
 }
 
 .overview-stats {
-    display: flex;
-    gap: 2rem;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 0.75rem;
 }
 
 .overview-stat {
     display: flex;
     flex-direction: column;
-    gap: 0.25rem;
+    gap: 0.35rem;
+    background: var(--surface-2);
+    border: 1px solid var(--border-light);
+    border-radius: calc(var(--radius) * 0.8);
+    padding: 0.7rem 0.8rem;
+    min-height: 72px;
 }
 
 .overview-label {
@@ -455,9 +460,74 @@ body {
 }
 
 .overview-value {
-    font-size: 1.1rem;
+    font-size: 1.02rem;
     font-weight: 600;
     color: var(--text);
+    line-height: 1.35;
+}
+
+.overview-value-macro {
+    font-size: 0.95rem;
+    line-height: 1.45;
+    word-break: break-word;
+}
+
+.overview-macro-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+}
+
+.macro-pill {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid var(--border-light);
+    border-radius: 999px;
+    padding: 0.2rem 0.5rem;
+    font-size: 0.82rem;
+    font-weight: 700;
+    line-height: 1.2;
+    background: var(--surface);
+}
+
+.macro-pill-protein {
+    color: var(--primary);
+}
+
+.macro-pill-carbs {
+    color: var(--secondary);
+}
+
+.macro-pill-fats {
+    color: var(--meal-lunch);
+}
+
+.overview-target-row {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    margin-bottom: 0.35rem;
+}
+
+.overview-target-row:last-child {
+    margin-bottom: 0;
+}
+
+.overview-target-label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+}
+
+.overview-stat-macro {
+    min-height: 86px;
+    background: linear-gradient(180deg, var(--surface) 0%, var(--surface-2) 100%);
+}
+
+.overview-stat-wide {
+    grid-column: span 2;
 }
 
 .overview-stat-highlight .overview-value {
@@ -2312,6 +2382,18 @@ body {
     font-size: 0.9rem;
 }
 
+.ingredient-macros .macro-protein {
+    color: var(--primary);
+}
+
+.ingredient-macros .macro-carbs {
+    color: var(--secondary);
+}
+
+.ingredient-macros .macro-fats {
+    color: var(--meal-lunch);
+}
+
 .ingredient-form {
     background: var(--surface);
     border: 1px solid var(--border);
@@ -2873,20 +2955,16 @@ body {
     }
 
     .overview-stats {
-        flex-direction: column;
+        grid-template-columns: 1fr;
         gap: 0.75rem;
     }
 
     .overview-stat {
-        flex-direction: row;
-        justify-content: space-between;
-        padding-bottom: 0.5rem;
-        border-bottom: 1px solid var(--border-light);
+        min-height: auto;
     }
 
-    .overview-stat:last-child {
-        border-bottom: none;
-        padding-bottom: 0;
+    .overview-stat-wide {
+        grid-column: span 1;
     }
 
     .calorie-summary-row {

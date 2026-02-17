@@ -13,7 +13,7 @@ import { showToast, showFieldError, clearValidationErrors } from '../utils/feedb
 const MACRO_COLORS = {
   protein: 'var(--primary)',
   carbs: 'var(--secondary)',
-  fats: 'var(--text-secondary)'
+  fats: 'var(--meal-lunch)'
 };
 
 const MACRO_VIEW_MODES = ['percent', 'kcal', 'grams'];

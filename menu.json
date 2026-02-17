@@ -176,5 +176,192 @@
 				]
 			}
 		]
+	},
+	{
+		"id": "proats-fruit",
+		"name": "Proats & Fruit",
+		"type": "Breakfast",
+		"ingredients": [
+			{ "itemId": "rolled-oats", "itemName": "Oats (dry weight)", "itemUnit": "g", "quantity": 100 },
+			{ "itemId": "protein-powder", "itemName": "Whey Protein", "itemUnit": "scoop", "quantity": 1 },
+			{ "itemId": "banana", "itemName": "Large Banana", "itemUnit": "g", "quantity": 120 }
+		],
+		"instructions": [
+			{
+				"name": "Prep",
+				"steps": [
+					"Mix oats with water or milk and protein powder.",
+					"Top with sliced banana."
+				]
+			}
+		]
+	},
+	{
+		"id": "chicken-rice-bowl",
+		"name": "Chicken & Rice Bowl",
+		"type": "Lunch",
+		"ingredients": [
+			{ "itemId": "chicken-breast-lean", "itemName": "Chicken Breast (cooked)", "itemUnit": "g", "quantity": 180 },
+			{ "itemId": "white-rice", "itemName": "White Rice (cooked)", "itemUnit": "g", "quantity": 350 },
+			{ "itemId": "avocado", "itemName": "Avocado", "itemUnit": "g", "quantity": 80 }
+		],
+		"instructions": [
+			{
+				"name": "Assemble",
+				"steps": [
+					"Combine cooked chicken and rice in a bowl.",
+					"Slice avocado and add to the bowl."
+				]
+			}
+		]
+	},
+	{
+		"id": "yogurt-nuts-juice",
+		"name": "Yogurt, Nuts & Juice",
+		"type": "Snack",
+		"ingredients": [
+			{ "itemId": "greek-yogurt", "itemName": "Greek Yogurt (0% fat)", "itemUnit": "g", "quantity": 200 },
+			{ "itemId": "raw-almonds", "itemName": "Almonds", "itemUnit": "g", "quantity": 35 },
+			{ "itemId": "honey", "itemName": "Honey", "itemUnit": "g", "quantity": 21 },
+			{ "itemId": "orange-juice", "itemName": "Orange Juice", "itemUnit": "ml", "quantity": 250 }
+		],
+		"instructions": [
+			{
+				"name": "Serve",
+				"steps": [
+					"Serve yogurt topped with almond and honey.",
+					"Serve juice on the side."
+				]
+			}
+		]
+	},
+	{
+		"id": "beef-potatoes",
+		"name": "Beef & Potatoes",
+		"type": "Dinner",
+		"ingredients": [
+			{ "itemId": "minced-beef-lean-10", "itemName": "Lean Ground Beef (90-93% lean)", "itemUnit": "g", "quantity": 150 },
+			{ "itemId": "white-potato", "itemName": "White Potato (baked/air-fried)", "itemUnit": "g", "quantity": 400 },
+			{ "itemId": "olive-oil", "itemName": "Olive oil", "itemUnit": "g", "quantity": 14 }
+		],
+		"instructions": [
+			{
+				"name": "Cook",
+				"steps": [
+					"Cook beef in a pan until browned.",
+					"Bake or air-fry potatoes with olive oil.",
+					"Combine and serve."
+				]
+			}
+		]
+	},
+	{
+		"id": "eggs-oats",
+		"name": "Eggs & Oats Breakfast",
+		"type": "Breakfast",
+		"ingredients": [
+			{ "itemId": "whole-egg", "itemName": "Whole Eggs (boiled/poached/scrambled)", "itemUnit": "egg", "quantity": 4 },
+			{ "itemId": "rolled-oats", "itemName": "Oats (dry weight)", "itemUnit": "g", "quantity": 100 },
+			{ "itemId": "banana", "itemName": "Large Banana", "itemUnit": "g", "quantity": 120 }
+		],
+		"instructions": [
+			{
+				"name": "Prepare",
+				"steps": [
+					"Boil, poach, or scramble the eggs without oil.",
+					"Cook the oats with water or milk.",
+					"Serve with a banana."
+				]
+			}
+		]
+	},
+	{
+		"id": "grilled-salmon-potatoes",
+		"name": "Grilled Salmon & Potatoes",
+		"type": "Dinner",
+		"ingredients": [
+			{ "itemId": "salmon-fillet", "itemName": "Salmon Fillet", "itemUnit": "g", "quantity": 200 },
+			{ "itemId": "white-potato", "itemName": "White Potato", "itemUnit": "g", "quantity": 300 },
+			{ "itemId": "olive-oil", "itemName": "Olive Oil", "itemUnit": "g", "quantity": 10 },
+			{ "itemId": "mixed-vegetables", "itemName": "Mixed Veg", "itemUnit": "g", "quantity": 200 }
+		],
+		"instructions": [
+			{
+				"name": "Prepare",
+				"steps": [
+					"Rub salmon with half the olive oil, salt, and pepper.",
+					"Toss potatoes with remaining oil and roast or boil until tender.",
+					"Grill or bake salmon until cooked through.",
+					"Steam or sauté mixed vegetables.",
+					"Serve together."
+				]
+			}
+		]
+	},
+	{
+		"id": "cod-rice-spinach",
+		"name": "Cod with Rice & Spinach",
+		"type": "Dinner",
+		"ingredients": [
+			{ "itemId": "cod-fillet", "itemName": "Cod Fillet", "itemUnit": "g", "quantity": 200 },
+			{ "itemId": "white-rice", "itemName": "White Rice", "itemUnit": "g", "quantity": 250 },
+			{ "itemId": "frozen-spinach", "itemName": "Frozen Spinach", "itemUnit": "g", "quantity": 150 },
+			{ "itemId": "olive-oil", "itemName": "Olive Oil", "itemUnit": "g", "quantity": 10 },
+			{ "itemId": "lemon-juice", "itemName": "Lemon Juice", "itemUnit": "g", "quantity": 10 },
+			{ "itemId": "salt", "itemName": "Salt", "itemUnit": "g", "quantity": 1 },
+			{ "itemId": "black-pepper", "itemName": "Black Pepper", "itemUnit": "g", "quantity": 1 }
+		],
+		"instructions": [
+			{
+				"name": "Cook",
+				"steps": [
+					"Season cod with salt, pepper, and lemon juice.",
+					"Pan-sear cod in olive oil until flaky.",
+					"Thaw and sauté spinach, season lightly.",
+					"Serve cod over rice with a side of spinach."
+				]
+			}
+		]
+	},
+	{
+		"id": "mackerel-toast",
+		"name": "Mackerel on Toast",
+		"type": "Snack",
+		"ingredients": [
+			{ "itemId": "canned-mackerel-drained", "itemName": "Canned Mackerel", "itemUnit": "g", "quantity": 120 },
+			{ "itemId": "whole-wheat-bread", "itemName": "Whole Wheat Bread", "itemUnit": "g", "quantity": 70 },
+			{ "itemId": "lemon-juice", "itemName": "Lemon Juice", "itemUnit": "g", "quantity": 5 }
+		],
+		"instructions": [
+			{
+				"name": "Assemble",
+				"steps": [
+					"Toast the bread.",
+					"Top with drained mackerel.",
+					"Drizzle with lemon juice and serve."
+				]
+			}
+		]
+	},
+	{
+		"id": "tuna-salad-bowl",
+		"name": "Tuna Salad Bowl",
+		"type": "Snack",
+		"ingredients": [
+			{ "itemId": "canned-tuna-drained", "itemName": "Canned Tuna", "itemUnit": "g", "quantity": 120 },
+			{ "itemId": "mixed-vegetables", "itemName": "Mixed Vegetables", "itemUnit": "g", "quantity": 150 },
+			{ "itemId": "olive-oil", "itemName": "Olive Oil", "itemUnit": "g", "quantity": 5 },
+			{ "itemId": "lemon-juice", "itemName": "Lemon Juice", "itemUnit": "g", "quantity": 10 }
+		],
+		"instructions": [
+			{
+				"name": "Mix",
+				"steps": [
+					"Combine tuna and mixed vegetables in a bowl.",
+					"Dress with olive oil and lemon juice.",
+					"Toss well and serve."
+				]
+			}
+		]
 	}
 ]

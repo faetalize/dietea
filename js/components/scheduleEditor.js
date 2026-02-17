@@ -70,6 +70,42 @@ function calculateDayCalories(day) {
   return Math.round(total);
 }
 
+function calculateScheduleNutrition(schedule, excludeCheatDay = false) {
+  const totals = {
+    kcal: 0,
+    protein: 0,
+    carbs: 0,
+    lipids: 0,
+    dayCount: 0
+  };
+
+  schedule.forEach((day) => {
+    if (excludeCheatDay && day.isCheatDay) return;
+    totals.dayCount += 1;
+
+    if (!day.slots) return;
+    day.slots.forEach((slot) => {
+      if (!slot.mealId) return;
+      const meal = getMealById(slot.mealId);
+      if (!meal) return;
+      totals.kcal += meal.macros.kcal;
+      totals.protein += meal.macros.protein;
+      totals.carbs += meal.macros.carbs;
+      totals.lipids += meal.macros.lipids;
+    });
+  });
+
+  return totals;
+}
+
+function formatMacroPills({ protein, carbs, fats }) {
+  return `
+    <span class="macro-pill macro-pill-protein">P ${Math.round(protein)}g</span>
+    <span class="macro-pill macro-pill-carbs">C ${Math.round(carbs)}g</span>
+    <span class="macro-pill macro-pill-fats">F ${Math.round(fats)}g</span>
+  `;
+}
+
 function updateScheduleCalorieSummary() {
   const weeklyTarget = getWeeklyCalorieTarget();
   const totalCalories = calculateScheduleCalories(tempSchedule, true);
@@ -292,6 +328,148 @@ function renderScheduleEditor() {
   });
 }
 
+function dedupeMealsById(meals = []) {
+  const seen = new Set();
+  return meals.filter((meal) => {
+    if (!meal?.id || seen.has(meal.id)) return false;
+    seen.add(meal.id);
+    return true;
+  });
+}
+
+function randomFrom(list = []) {
+  if (!list.length) return null;
+  return list[Math.floor(Math.random() * list.length)] || null;
+}
+
+function getDailyMacroTargets(dailyCalories) {
+  const weight = Number(state.profile?.weight);
+  const safeWeight = Number.isFinite(weight) && weight > 0 ? weight : 75;
+  const safeCalories = Number.isFinite(dailyCalories) && dailyCalories > 0 ? dailyCalories : 2000;
+
+  const proteinMinG = Math.max(0, Math.round(safeWeight * 1.6));
+  const proteinKcal = proteinMinG * 4;
+
+  const fatTargetG = Math.max(0, Math.round(safeWeight * 0.8));
+  const fatFloorG = Math.max(0, Math.round(safeWeight * 0.6));
+  const maxFatByRemaining = Math.max(0, Math.floor((safeCalories - proteinKcal) / 9));
+
+  let fatsTargetG = fatTargetG;
+  if (fatsTargetG > maxFatByRemaining) {
+    fatsTargetG = Math.max(Math.min(fatFloorG, maxFatByRemaining), 0);
+  }
+
+  const carbsTargetKcal = Math.max(0, safeCalories - proteinKcal - fatsTargetG * 9);
+  const carbsTargetG = Math.round(carbsTargetKcal / 4);
+
+  return {
+    proteinMinG,
+    fatsMinG: Math.min(fatFloorG, maxFatByRemaining),
+    proteinTargetG: proteinMinG,
+    carbsTargetG,
+    fatsTargetG,
+    proteinRatio: safeCalories > 0 ? proteinKcal / safeCalories : 0,
+    carbsRatio: safeCalories > 0 ? carbsTargetKcal / safeCalories : 0,
+    fatsRatio: safeCalories > 0 ? (fatsTargetG * 9) / safeCalories : 0
+  };
+}
+
+function getRandomizedSlotPools(meals) {
+  const breakfast = meals.filter((m) => m.type.toLowerCase() === 'breakfast');
+  const lunch = meals.filter((m) => m.type.toLowerCase() === 'lunch');
+  const snack = meals.filter((m) => m.type.toLowerCase() === 'snack');
+  const dinner = meals.filter((m) => m.type.toLowerCase() === 'dinner');
+  const lunchDinnerShared = dedupeMealsById([...lunch, ...dinner]);
+
+  return {
+    breakfast: breakfast.length ? breakfast : meals,
+    lunch: lunchDinnerShared.length ? lunchDinnerShared : meals,
+    snack: snack.length ? snack : meals,
+    dinner: lunchDinnerShared.length ? lunchDinnerShared : meals
+  };
+}
+
+function sumDayMacros(selectedMeals = []) {
+  return selectedMeals.reduce(
+    (acc, meal) => ({
+      kcal: acc.kcal + (meal?.macros?.kcal || 0),
+      protein: acc.protein + (meal?.macros?.protein || 0),
+      carbs: acc.carbs + (meal?.macros?.carbs || 0),
+      lipids: acc.lipids + (meal?.macros?.lipids || 0)
+    }),
+    { kcal: 0, protein: 0, carbs: 0, lipids: 0 }
+  );
+}
+
+function scoreDayCandidate(macros, dailyBudget, targets) {
+  const proteinShortfall = Math.max(0, targets.proteinMinG - macros.protein);
+  const fatsShortfall = Math.max(0, targets.fatsMinG - macros.lipids);
+  const minPenalty = proteinShortfall + fatsShortfall;
+
+  const kcal = Math.max(1, macros.kcal);
+  const proteinRatio = (macros.protein * 4) / kcal;
+  const carbsRatio = (macros.carbs * 4) / kcal;
+  const fatsRatio = (macros.lipids * 9) / kcal;
+
+  const ratioPenalty =
+    Math.abs(proteinRatio - targets.proteinRatio) +
+    Math.abs(carbsRatio - targets.carbsRatio) +
+    Math.abs(fatsRatio - targets.fatsRatio);
+
+  const calorieGap = dailyBudget ? Math.max(0, dailyBudget - macros.kcal) : 0;
+
+  return { minPenalty, ratioPenalty, calorieGap };
+}
+
+function isBetterScore(next, current) {
+  if (!current) return true;
+  if (next.minPenalty !== current.minPenalty) return next.minPenalty < current.minPenalty;
+  if (Math.abs(next.ratioPenalty - current.ratioPenalty) > 1e-6) return next.ratioPenalty < current.ratioPenalty;
+  return next.calorieGap < current.calorieGap;
+}
+
+function randomizeDaySlots(slotPools, dailyBudget, targets) {
+  const slotOrder = ['breakfast', 'lunch', 'snack', 'dinner'];
+  let best = null;
+
+  for (let attempt = 0; attempt < 500; attempt++) {
+    const candidateMeals = [];
+
+    for (const slotType of slotOrder) {
+      const pool = slotPools[slotType] || [];
+      candidateMeals.push(randomFrom(pool));
+    }
+
+    const macros = sumDayMacros(candidateMeals);
+    if (dailyBudget && macros.kcal > dailyBudget) continue;
+
+    const score = scoreDayCandidate(macros, dailyBudget, targets);
+    if (isBetterScore(score, best?.score)) {
+      best = { candidateMeals, macros, score };
+    }
+  }
+
+  if (best) return best;
+
+  const fallbackMeals = [];
+  let runningKcal = 0;
+
+  for (const slotType of ['breakfast', 'lunch', 'snack', 'dinner']) {
+    const pool = [...(slotPools[slotType] || [])].sort((a, b) => a.macros.kcal - b.macros.kcal);
+    const fitting = !dailyBudget ? pool : pool.filter((meal) => runningKcal + meal.macros.kcal <= dailyBudget);
+    const chosen = randomFrom(fitting.length ? fitting : pool) || null;
+    if (chosen) runningKcal += chosen.macros.kcal;
+    fallbackMeals.push(chosen);
+  }
+
+  const fallbackMacros = sumDayMacros(fallbackMeals);
+  return {
+    candidateMeals: fallbackMeals,
+    macros: fallbackMacros,
+    score: scoreDayCandidate(fallbackMacros, dailyBudget, targets)
+  };
+}
+
 function autoGenerateSchedule() {
   const meals = dataStore.meals;
   const weeklyTarget = getWeeklyCalorieTarget();
@@ -301,20 +479,17 @@ function autoGenerateSchedule() {
     return;
   }
 
-  const mealsByType = {
-    breakfast: meals.filter((m) => m.type.toLowerCase() === 'breakfast').sort((a, b) => a.macros.kcal - b.macros.kcal),
-    lunch: meals.filter((m) => m.type.toLowerCase() === 'lunch').sort((a, b) => a.macros.kcal - b.macros.kcal),
-    snack: meals.filter((m) => m.type.toLowerCase() === 'snack').sort((a, b) => a.macros.kcal - b.macros.kcal),
-    dinner: meals.filter((m) => m.type.toLowerCase() === 'dinner').sort((a, b) => a.macros.kcal - b.macros.kcal)
-  };
+  const slotPools = getRandomizedSlotPools(meals);
 
   const existingCheatDay = tempSchedule.findIndex((d) => d.isCheatDay);
   const daysToSchedule = existingCheatDay >= 0 ? 6 : 7;
   const dailyBudget = weeklyTarget ? Math.floor(weeklyTarget / daysToSchedule) : null;
+  const macroTargets = getDailyMacroTargets(dailyBudget || state.profile?.recommendedCalories || state.profile?.maintenanceCalories || 2000);
 
   const newSchedule = [];
   let totalCalories = 0;
-  let dayCounter = 0;
+  let underBudgetDays = 0;
+  let macroMinDays = 0;
 
   for (let i = 0; i < 7; i++) {
     const isCheatDay = i === existingCheatDay;
@@ -324,45 +499,24 @@ function autoGenerateSchedule() {
       continue;
     }
 
-    const daySlots = [];
-    let dayCalories = 0;
+    const dayResult = randomizeDaySlots(slotPools, dailyBudget, macroTargets);
+    const dayMeals = dayResult.candidateMeals;
 
-    ['breakfast', 'lunch', 'snack', 'dinner'].forEach((slotType) => {
-      const available = mealsByType[slotType];
-      let selectedMeal = null;
+    const daySlots = ['breakfast', 'lunch', 'snack', 'dinner'].map((slotType, index) => ({
+      slot: slotType,
+      mealId: dayMeals[index]?.id || null,
+      time: defaultTimeForSlot(slotType)
+    }));
 
-      if (available.length > 0) {
-        if (dailyBudget) {
-          const remainingDayBudget = dailyBudget - dayCalories;
-          const fittingMeals = available.filter((m) => m.macros.kcal <= remainingDayBudget);
+    totalCalories += dayResult.macros.kcal;
 
-          if (fittingMeals.length > 0) {
-            selectedMeal = fittingMeals[dayCounter % fittingMeals.length];
-          } else {
-            selectedMeal = available[0];
-          }
-        } else {
-          selectedMeal = available[dayCounter % available.length];
-        }
-      } else {
-        const allMealsSorted = [...meals].sort((a, b) => a.macros.kcal - b.macros.kcal);
-        selectedMeal = allMealsSorted[dayCounter % allMealsSorted.length];
-      }
+    if (!dailyBudget || dayResult.macros.kcal <= dailyBudget) underBudgetDays++;
 
-      if (selectedMeal) {
-        dayCalories += selectedMeal.macros.kcal;
-        totalCalories += selectedMeal.macros.kcal;
-      }
-
-      daySlots.push({
-        slot: slotType,
-        mealId: selectedMeal ? selectedMeal.id : null,
-        time: defaultTimeForSlot(slotType)
-      });
-    });
+    const proteinMet = dayResult.macros.protein >= macroTargets.proteinMinG;
+    const fatsMet = dayResult.macros.lipids >= macroTargets.fatsMinG;
+    if (proteinMet && fatsMet) macroMinDays++;
 
     newSchedule.push({ day: i, slots: daySlots, isCheatDay: false });
-    dayCounter++;
   }
 
   tempSchedule = newSchedule;
@@ -370,12 +524,18 @@ function autoGenerateSchedule() {
   updateScheduleCalorieSummary();
 
   if (weeklyTarget && totalCalories <= weeklyTarget) {
-    const remaining = weeklyTarget - totalCalories;
-    showToast(`Generated within budget (${remaining.toLocaleString()} kcal remaining)`, 'success');
+    const remaining = Math.round(weeklyTarget - totalCalories);
+    showToast(
+      `Generated random plan: ${underBudgetDays}/${daysToSchedule} days under cap, ${macroMinDays}/${daysToSchedule} days met macro minimums (${remaining.toLocaleString()} kcal weekly remaining)`,
+      'success'
+    );
   } else if (weeklyTarget) {
-    showToast('Generated (may exceed target - adjust manually)', 'default');
+    showToast(
+      `Generated random plan: ${underBudgetDays}/${daysToSchedule} days under cap, ${macroMinDays}/${daysToSchedule} days met macro minimums`,
+      'default'
+    );
   } else {
-    showToast('Schedule auto-generated', 'success');
+    showToast(`Schedule auto-generated (${macroMinDays}/${daysToSchedule} days met macro minimums)`, 'success');
   }
 }
 
@@ -418,18 +578,70 @@ export function renderScheduleOverview() {
 
   const weeklyTarget = getWeeklyCalorieTarget();
   const cheatDayIndex = schedule.findIndex((d) => d.isCheatDay);
-  const totalCalories = calculateScheduleCalories(schedule, true);
+  const totals = calculateScheduleNutrition(schedule, true);
+  const totalCalories = Math.round(totals.kcal);
+  const dayCount = Math.max(1, totals.dayCount || 0);
+  const avgDailyCalories = Math.round(totals.kcal / dayCount);
+  const avgDailyProtein = totals.protein / dayCount;
+  const avgDailyCarbs = totals.carbs / dayCount;
+  const avgDailyFats = totals.lipids / dayCount;
+
+  const dailyCaloriesTarget = state.profile?.recommendedCalories || state.profile?.maintenanceCalories || null;
+  const dailyMacroTargets = dailyCaloriesTarget ? getDailyMacroTargets(dailyCaloriesTarget) : null;
 
   const weeklyTargetEl = document.getElementById('overview-weekly-target');
   const scheduledEl = document.getElementById('overview-scheduled');
   const remainingEl = document.getElementById('overview-remaining');
   const remainingContainer = document.getElementById('overview-remaining-container');
+  const dailyAverageEl = document.getElementById('overview-daily-average');
+  const macrosTotalEl = document.getElementById('overview-macros-total');
+  const macrosAverageEl = document.getElementById('overview-macros-average');
+  const macrosTargetEl = document.getElementById('overview-macros-target');
   const cheatDayEl = document.getElementById('overview-cheat-day');
   const cheatDayNameEl = document.getElementById('overview-cheat-day-name');
   const cheatBudgetEl = document.getElementById('overview-cheat-budget');
 
-  if (!weeklyTargetEl || !scheduledEl || !remainingEl || !remainingContainer || !cheatDayEl || !cheatDayNameEl || !cheatBudgetEl) {
+  if (
+    !weeklyTargetEl ||
+    !scheduledEl ||
+    !remainingEl ||
+    !remainingContainer ||
+    !dailyAverageEl ||
+    !macrosTotalEl ||
+    !macrosAverageEl ||
+    !macrosTargetEl ||
+    !cheatDayEl ||
+    !cheatDayNameEl ||
+    !cheatBudgetEl
+  ) {
     return;
+  }
+
+  dailyAverageEl.textContent = `${avgDailyCalories.toLocaleString()} kcal/day`;
+  macrosTotalEl.innerHTML = `
+    <span class="overview-macro-row">${formatMacroPills({ protein: totals.protein, carbs: totals.carbs, fats: totals.lipids })}</span>
+  `;
+  macrosAverageEl.innerHTML = `
+    <span class="overview-macro-row">${formatMacroPills({ protein: avgDailyProtein, carbs: avgDailyCarbs, fats: avgDailyFats })}</span>
+  `;
+
+  if (dailyMacroTargets) {
+    const totalProteinTarget = dailyMacroTargets.proteinMinG * dayCount;
+    const totalCarbTarget = dailyMacroTargets.carbsTargetG * dayCount;
+    const totalFatTarget = dailyMacroTargets.fatsMinG * dayCount;
+
+    macrosTargetEl.innerHTML = `
+      <span class="overview-target-row">
+        <span class="overview-target-label">Daily</span>
+        <span class="overview-macro-row">${formatMacroPills({ protein: dailyMacroTargets.proteinMinG, carbs: dailyMacroTargets.carbsTargetG, fats: dailyMacroTargets.fatsMinG })}</span>
+      </span>
+      <span class="overview-target-row">
+        <span class="overview-target-label">Total target (${dayCount}d)</span>
+        <span class="overview-macro-row">${formatMacroPills({ protein: totalProteinTarget, carbs: totalCarbTarget, fats: totalFatTarget })}</span>
+      </span>
+    `;
+  } else {
+    macrosTargetEl.textContent = 'Set profile for macro targets';
   }
 
   if (weeklyTarget) {

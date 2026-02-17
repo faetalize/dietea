@@ -50,6 +50,36 @@
     "lipid_per_unit": 0.31
   },
   {
+    "id": "white-rice",
+    "name": "White Rice (Cooked)",
+    "category": "Grains",
+    "unit": "g",
+    "kcal": 1.3,
+    "carb_per_unit": 0.28,
+    "protein_per_unit": 0.027,
+    "lipid_per_unit": 0.003
+  },
+  {
+    "id": "white-potato",
+    "name": "White Potato (Baked)",
+    "category": "Vegetables",
+    "unit": "g",
+    "kcal": 0.93,
+    "carb_per_unit": 0.21,
+    "protein_per_unit": 0.025,
+    "lipid_per_unit": 0.001
+  },
+  {
+    "id": "minced-beef-lean-10",
+    "name": "Lean Ground Beef (10% Fat)",
+    "category": "Meat",
+    "unit": "g",
+    "kcal": 1.76,
+    "carb_per_unit": 0,
+    "protein_per_unit": 0.2,
+    "lipid_per_unit": 0.1
+  },
+  {
     "id": "honey",
     "name": "Honey / maple syrup",
     "category": "Sweeteners",
@@ -418,5 +448,45 @@
     "carb_per_unit": 0.54,
     "protein_per_unit": 0.14,
     "lipid_per_unit": 0.13
+  },
+  {
+    "id": "white-rice",
+    "name": "White Rice (Cooked)",
+    "category": "Grains",
+    "unit": "g",
+    "kcal": 1.3,
+    "carb_per_unit": 0.28,
+    "protein_per_unit": 0.027,
+    "lipid_per_unit": 0.003
+  },
+  {
+    "id": "white-potato",
+    "name": "White Potato (Baked)",
+    "category": "Vegetables",
+    "unit": "g",
+    "kcal": 0.93,
+    "carb_per_unit": 0.21,
+    "protein_per_unit": 0.025,
+    "lipid_per_unit": 0.001
+  },
+  {
+    "id": "minced-beef-lean-10",
+    "name": "Lean Ground Beef (10% Fat)",
+    "category": "Meat",
+    "unit": "g",
+    "kcal": 1.76,
+    "carb_per_unit": 0,
+    "protein_per_unit": 0.2,
+    "lipid_per_unit": 0.1
+  },
+  {
+    "id": "orange-juice",
+    "name": "Orange Juice",
+    "category": "Beverages",
+    "unit": "ml",
+    "kcal": 0.45,
+    "carb_per_unit": 0.104,
+    "protein_per_unit": 0.007,
+    "lipid_per_unit": 0.002
   }
 ]

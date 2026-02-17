@@ -79,10 +79,10 @@ export function renderIngredients() {
             <div class="ingredient-name">${item.name}</div>
             <div class="ingredient-meta">${item.unit} unit · ${category}</div>
             <div class="ingredient-macros">
-              <span>${fmt(item.kcal)} kcal/${item.unit}</span>
-              <span>${fmt(item.protein_per_unit)} g protein/${item.unit}</span>
-              <span>${fmt(item.carb_per_unit)} g carbs/${item.unit}</span>
-              <span>${fmt(item.lipid_per_unit)} g lipids/${item.unit}</span>
+              <span class="macro-kcal">${fmt(item.kcal)} kcal/${item.unit}</span>
+              <span class="macro-protein">${fmt(item.protein_per_unit)} g protein/${item.unit}</span>
+              <span class="macro-carbs">${fmt(item.carb_per_unit)} g carbs/${item.unit}</span>
+              <span class="macro-fats">${fmt(item.lipid_per_unit)} g lipids/${item.unit}</span>
             </div>
           </div>
         `
