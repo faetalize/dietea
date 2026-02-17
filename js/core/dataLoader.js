@@ -1,7 +1,7 @@
 import { FoodItem } from './models.js';
 
 export async function loadIngredients() {
-  const candidates = ['./data/ingredients.json', './ingredients.json'];
+  const candidates = ['./ingredients.json'];
   let response = null;
 
   for (const url of candidates) {
@@ -19,7 +19,7 @@ export async function loadIngredients() {
 }
 
 export async function loadMeals() {
-  const candidates = ['./data/menu.json', './menu.json', './meals.json'];
+  const candidates = ['./menu.json'];
   let response = null;
 
   for (const url of candidates) {
