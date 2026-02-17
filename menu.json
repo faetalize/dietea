@@ -1,1 +1,180 @@
-[]
+[ 
+	{
+		"id": "overnight-oats-berries",
+		"name": "Overnight Oats & Berries",
+		"type": "Breakfast",
+		"ingredients": [
+			{ "itemId": "rolled-oats", "itemName": "Rolled oats", "itemUnit": "g", "quantity": 60 },
+			{ "itemId": "greek-yogurt", "itemName": "Plain Greek yogurt (low-lactose)", "itemUnit": "g", "quantity": 180 },
+			{ "itemId": "mixed-berries", "itemName": "Mixed berries", "itemUnit": "g", "quantity": 100 },
+			{ "itemId": "chia-seeds", "itemName": "Chia seeds", "itemUnit": "g", "quantity": 10 },
+			{ "itemId": "honey", "itemName": "Honey / maple syrup", "itemUnit": "g", "quantity": 5 }
+		],
+		"instructions": [
+			{
+				"name": "Prep",
+				"steps": [
+					"Mix oats, yogurt, chia, and honey in a container.",
+					"Fold in berries.",
+					"Refrigerate overnight and serve cold."
+				]
+			}
+		]
+	},
+	{
+		"id": "tofu-quinoa-bowl",
+		"name": "Tofu Quinoa Power Bowl",
+		"type": "Lunch",
+		"ingredients": [
+			{ "itemId": "firm-tofu", "itemName": "Firm tofu", "itemUnit": "g", "quantity": 180 },
+			{ "itemId": "cooked-quinoa", "itemName": "Cooked quinoa", "itemUnit": "g", "quantity": 150 },
+			{ "itemId": "mixed-vegetables", "itemName": "Mixed vegetables", "itemUnit": "g", "quantity": 180 },
+			{ "itemId": "olive-oil", "itemName": "Olive oil", "itemUnit": "g", "quantity": 6 },
+			{ "itemId": "soy-sauce", "itemName": "Soy sauce", "itemUnit": "g", "quantity": 12 },
+			{ "itemId": "garlic", "itemName": "Garlic", "itemUnit": "g", "quantity": 5 }
+		],
+		"instructions": [
+			{
+				"name": "Cook",
+				"steps": [
+					"Pan-sear tofu with oil and garlic until golden.",
+					"Add mixed vegetables and cook until tender.",
+					"Stir in soy sauce and serve over quinoa."
+				]
+			}
+		]
+	},
+	{
+		"id": "lentil-rice-bowl",
+		"name": "Lentil Brown Rice Bowl",
+		"type": "Dinner",
+		"ingredients": [
+			{ "itemId": "lentils", "itemName": "Cooked lentils", "itemUnit": "g", "quantity": 180 },
+			{ "itemId": "brown-rice", "itemName": "Cooked brown rice", "itemUnit": "g", "quantity": 140 },
+			{ "itemId": "frozen-spinach", "itemName": "Frozen spinach", "itemUnit": "g", "quantity": 100 },
+			{ "itemId": "tomato", "itemName": "Tomato", "itemUnit": "g", "quantity": 100 },
+			{ "itemId": "olive-oil", "itemName": "Olive oil", "itemUnit": "g", "quantity": 6 },
+			{ "itemId": "cumin", "itemName": "Cumin", "itemUnit": "g", "quantity": 2 },
+			{ "itemId": "salt", "itemName": "Salt", "itemUnit": "g", "quantity": 1 }
+		],
+		"instructions": [
+			{
+				"name": "One-pot",
+				"steps": [
+					"Warm oil, then add cumin and tomato.",
+					"Stir in lentils, spinach, and salt.",
+					"Serve hot with brown rice."
+				]
+			}
+		]
+	},
+	{
+		"id": "protein-yogurt-snack",
+		"name": "Protein Yogurt Snack",
+		"type": "Snack",
+		"ingredients": [
+			{ "itemId": "greek-yogurt", "itemName": "Plain Greek yogurt (low-lactose)", "itemUnit": "g", "quantity": 200 },
+			{ "itemId": "protein-powder", "itemName": "Lazar Whey Concentrate", "itemUnit": "scoop", "quantity": 1 },
+			{ "itemId": "banana", "itemName": "Banana", "itemUnit": "g", "quantity": 80 }
+		],
+		"instructions": [
+			{
+				"name": "Mix",
+				"steps": [
+					"Whisk protein powder into yogurt until smooth.",
+					"Top with sliced banana."
+				]
+			}
+		]
+	},
+	{
+		"id": "avocado-cottage-toast",
+		"name": "Avocado Cottage Toast",
+		"type": "Breakfast",
+		"ingredients": [
+			{ "itemId": "whole-wheat-bread", "itemName": "Whole wheat bread", "itemUnit": "g", "quantity": 70 },
+			{ "itemId": "cottage-cheese", "itemName": "Low-fat cottage cheese", "itemUnit": "g", "quantity": 80 },
+			{ "itemId": "avocado", "itemName": "Avocado", "itemUnit": "g", "quantity": 50 },
+			{ "itemId": "lemon-juice", "itemName": "Lemon juice", "itemUnit": "g", "quantity": 6 },
+			{ "itemId": "black-pepper", "itemName": "Black pepper", "itemUnit": "g", "quantity": 1 }
+		],
+		"instructions": [
+			{
+				"name": "Assemble",
+				"steps": [
+					"Toast bread slices.",
+					"Spread cottage cheese and mashed avocado.",
+					"Finish with lemon juice and black pepper."
+				]
+			}
+		]
+	},
+	{
+		"id": "chickpea-veggie-saute",
+		"name": "Chickpea Veggie Saute",
+		"type": "Lunch",
+		"ingredients": [
+			{ "itemId": "chickpeas", "itemName": "Chickpeas (cooked/canned, drained)", "itemUnit": "g", "quantity": 180 },
+			{ "itemId": "mixed-vegetables", "itemName": "Mixed vegetables", "itemUnit": "g", "quantity": 180 },
+			{ "itemId": "olive-oil", "itemName": "Olive oil", "itemUnit": "g", "quantity": 6 },
+			{ "itemId": "garlic", "itemName": "Garlic", "itemUnit": "g", "quantity": 5 },
+			{ "itemId": "soy-sauce", "itemName": "Soy sauce", "itemUnit": "g", "quantity": 8 }
+		],
+		"instructions": [
+			{
+				"name": "Cook",
+				"steps": [
+					"Saute garlic in olive oil.",
+					"Add chickpeas and mixed vegetables.",
+					"Season with soy sauce and cook until hot."
+				]
+			}
+		]
+	},
+	{
+		"id": "spinach-egg-scramble-toast",
+		"name": "Spinach Egg Scramble Toast",
+		"type": "Breakfast",
+		"ingredients": [
+			{ "itemId": "egg-by-weight", "itemName": "Egg by weight", "itemUnit": "g", "quantity": 150 },
+			{ "itemId": "frozen-spinach", "itemName": "Frozen spinach", "itemUnit": "g", "quantity": 80 },
+			{ "itemId": "olive-oil", "itemName": "Olive oil", "itemUnit": "g", "quantity": 4 },
+			{ "itemId": "whole-wheat-bread", "itemName": "Whole wheat bread", "itemUnit": "g", "quantity": 60 },
+			{ "itemId": "black-pepper", "itemName": "Black pepper", "itemUnit": "g", "quantity": 1 },
+			{ "itemId": "salt", "itemName": "Salt", "itemUnit": "g", "quantity": 1 }
+		],
+		"instructions": [
+			{
+				"name": "Cook",
+				"steps": [
+					"Warm olive oil in a non-stick pan and cook spinach until softened.",
+					"Add beaten eggs, season with salt and pepper, and scramble until just set.",
+					"Serve with toasted whole wheat bread."
+				]
+			}
+		]
+	},
+	{
+		"id": "egg-avocado-toast",
+		"name": "Egg & Avocado Toast",
+		"type": "Breakfast",
+		"ingredients": [
+			{ "itemId": "egg-by-weight", "itemName": "Egg by weight", "itemUnit": "g", "quantity": 100 },
+			{ "itemId": "whole-wheat-bread", "itemName": "Whole wheat bread", "itemUnit": "g", "quantity": 70 },
+			{ "itemId": "avocado", "itemName": "Avocado", "itemUnit": "g", "quantity": 45 },
+			{ "itemId": "lemon-juice", "itemName": "Lemon juice", "itemUnit": "g", "quantity": 6 },
+			{ "itemId": "black-pepper", "itemName": "Black pepper", "itemUnit": "g", "quantity": 1 },
+			{ "itemId": "salt", "itemName": "Salt", "itemUnit": "g", "quantity": 1 }
+		],
+		"instructions": [
+			{
+				"name": "Assemble",
+				"steps": [
+					"Boil or pan-cook the eggs to preferred doneness.",
+					"Toast the bread and mash avocado with lemon juice, salt, and pepper.",
+					"Spread avocado on toast and top with sliced eggs."
+				]
+			}
+		]
+	}
+]

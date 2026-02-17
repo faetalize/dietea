@@ -24,6 +24,10 @@
     --border: #e2e8f0;
     --border-light: #f1f5f9;
     --hover: #f1f5f9;
+    --meal-lunch: #7c3aed;
+    --meal-lunch-light: #ede9fe;
+    --meal-dinner: #2563eb;
+    --meal-dinner-light: #dbeafe;
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
     --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
     --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.05);
@@ -2176,9 +2180,28 @@ body {
     margin-bottom: 0.75rem;
 }
 
-.menu-card .meal-type.snack {
+.menu-card .meal-type.breakfast,
+.meal-type.breakfast {
+    background: var(--primary-light);
+    color: var(--primary-dark);
+}
+
+.menu-card .meal-type.lunch,
+.meal-type.lunch {
+    background: var(--meal-lunch-light);
+    color: var(--meal-lunch);
+}
+
+.menu-card .meal-type.dinner,
+.meal-type.dinner {
+    background: var(--meal-dinner-light);
+    color: var(--meal-dinner);
+}
+
+.menu-card .meal-type.snack,
+.meal-type.snack {
     background: var(--secondary-light);
-    color: #b45309;
+    color: var(--secondary);
 }
 
 .menu-card .macros {

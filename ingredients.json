@@ -290,6 +290,126 @@
     "lipid_per_unit": 0.13
   },
   {
+    "id": "chicken-breast-lean",
+    "name": "Chicken breast (skinless, lean)",
+    "category": "Proteins",
+    "unit": "g",
+    "kcal": 1.2,
+    "carb_per_unit": 0,
+    "protein_per_unit": 0.23,
+    "lipid_per_unit": 0.026
+  },
+  {
+    "id": "minced-beef-lean-5",
+    "name": "Lean minced beef (5% fat)",
+    "category": "Proteins",
+    "unit": "g",
+    "kcal": 1.37,
+    "carb_per_unit": 0,
+    "protein_per_unit": 0.21,
+    "lipid_per_unit": 0.05
+  },
+  {
+    "id": "minced-beef-regular-15",
+    "name": "Minced beef (regular, ~15% fat)",
+    "category": "Proteins",
+    "unit": "g",
+    "kcal": 2.15,
+    "carb_per_unit": 0,
+    "protein_per_unit": 0.18,
+    "lipid_per_unit": 0.15
+  },
+  {
+    "id": "sirloin-steak",
+    "name": "Beef sirloin steak",
+    "category": "Proteins",
+    "unit": "g",
+    "kcal": 1.65,
+    "carb_per_unit": 0,
+    "protein_per_unit": 0.21,
+    "lipid_per_unit": 0.08
+  },
+  {
+    "id": "rump-steak",
+    "name": "Beef rump steak",
+    "category": "Proteins",
+    "unit": "g",
+    "kcal": 1.71,
+    "carb_per_unit": 0,
+    "protein_per_unit": 0.21,
+    "lipid_per_unit": 0.09
+  },
+  {
+    "id": "ribeye-steak",
+    "name": "Beef ribeye steak",
+    "category": "Proteins",
+    "unit": "g",
+    "kcal": 2.4,
+    "carb_per_unit": 0,
+    "protein_per_unit": 0.19,
+    "lipid_per_unit": 0.19
+  },
+  {
+    "id": "cod-fillet",
+    "name": "Cod fillet",
+    "category": "Proteins",
+    "unit": "g",
+    "kcal": 0.82,
+    "carb_per_unit": 0,
+    "protein_per_unit": 0.18,
+    "lipid_per_unit": 0.007
+  },
+  {
+    "id": "panga-fillet",
+    "name": "Panga fillet",
+    "category": "Proteins",
+    "unit": "g",
+    "kcal": 0.92,
+    "carb_per_unit": 0,
+    "protein_per_unit": 0.15,
+    "lipid_per_unit": 0.03
+  },
+  {
+    "id": "canned-tuna-drained",
+    "name": "Canned tuna (drained)",
+    "category": "Proteins",
+    "unit": "g",
+    "kcal": 1.16,
+    "carb_per_unit": 0,
+    "protein_per_unit": 0.26,
+    "lipid_per_unit": 0.01
+  },
+  {
+    "id": "canned-mackerel-drained",
+    "name": "Canned mackerel (drained)",
+    "category": "Proteins",
+    "unit": "g",
+    "kcal": 1.9,
+    "carb_per_unit": 0,
+    "protein_per_unit": 0.24,
+    "lipid_per_unit": 0.11
+  },
+  {
+    "id": "egg-by-weight",
+    "name": "Egg by weight",
+    "category": "Proteins",
+    "unit": "g",
+    "kcal": 1.43,
+    "carb_per_unit": 0.01,
+    "protein_per_unit": 0.126,
+    "lipid_per_unit": 0.095
+  },
+  {
+    "id": "whole-egg",
+    "name": "Whole egg",
+    "category": "Proteins",
+    "unit": "egg",
+    "kcal": 72,
+    "carb_per_unit": 0.4,
+    "protein_per_unit": 6.3,
+    "lipid_per_unit": 4.8
+  },
+  {
     "id": "smoked-paprika",
     "name": "Smoked paprika",
     "category": "Spices",

@@ -15,6 +15,7 @@ export function renderMealDetail(mealId, mealDetailContent) {
   }
 
   const hasInstructions = Array.isArray(meal.instructions) && meal.instructions.length;
+  const typeClass = (meal.type || '').toLowerCase();
 
   let instructionsHTML = '';
   if (hasInstructions) {
@@ -58,7 +59,7 @@ export function renderMealDetail(mealId, mealDetailContent) {
 
   container.innerHTML = `
     <h1>${meal.name}</h1>
-    <span class="meal-type ${meal.type === 'Snack' ? 'snack' : ''}" style="display: inline-block; margin-bottom: 1.5rem;">${meal.type}</span>
+    <span class="meal-type ${typeClass}" style="display: inline-block; margin-bottom: 1.5rem;">${meal.type}</span>
     <div class="detail-section">
       <h2><span class="material-symbols-rounded">monitoring</span> Nutrition Information</h2>
       <div class="nutrition-grid">

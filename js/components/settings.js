@@ -57,6 +57,7 @@ export function setupSettingsListeners({
   const deleteAllBtn = document.getElementById('delete-all-data');
 
   const connectIngredientsFileBtn = document.getElementById('connect-ingredients-file');
+  const connectBothFilesBtn = document.getElementById('connect-both-files');
   const disconnectFileBtn = document.getElementById('disconnect-ingredients-file');
   const ingredientsFileStatus = document.getElementById('ingredients-file-status');
   const disconnectIngredientsItem = document.getElementById('disconnect-ingredients-item');
@@ -111,9 +112,9 @@ export function setupSettingsListeners({
   if (isFileSystemSupported()) {
     updateFileSystemUI();
 
-    connectIngredientsFileBtn?.addEventListener('click', async () => {
+    const connectIngredients = async () => {
       const fileHandle = await selectIngredientsFile();
-      if (!fileHandle) return;
+      if (!fileHandle) return false;
 
       const ingredientsData = await loadIngredientsFromFile(fileHandle);
       if (ingredientsData && Array.isArray(ingredientsData)) {
@@ -121,9 +122,48 @@ export function setupSettingsListeners({
         onIngredientsChanged?.();
         await updateFileSystemUI();
         showToast('Connected to ingredients.json', 'success');
+        return true;
       } else {
         showToast('Invalid ingredients file', 'error');
+        return false;
       }
+    };
+
+    const connectMeals = async () => {
+      const fileHandle = await selectMealsFile();
+      if (!fileHandle) return false;
+
+      const mealsData = await loadMealsFromFile(fileHandle);
+      if (mealsData && Array.isArray(mealsData)) {
+        setMeals(mealsData.map(obj => hydrateMeal(obj)).filter(Boolean));
+        onMealsChanged?.();
+        await updateFileSystemUI();
+        showToast('Connected to menu.json', 'success');
+        return true;
+      }
+
+      showToast('Invalid menu file', 'error');
+      return false;
+    };
+
+    connectIngredientsFileBtn?.addEventListener('click', async () => {
+      await connectIngredients();
+    });
+
+    connectBothFilesBtn?.addEventListener('click', async () => {
+      const ingredientsConnected = await connectIngredients();
+      if (!ingredientsConnected) {
+        showToast('Setup canceled before ingredients.json was connected', 'default');
+        return;
+      }
+
+      const mealsConnected = await connectMeals();
+      if (!mealsConnected) {
+        showToast('Ingredients connected. Connect menu.json to finish setup', 'default');
+        return;
+      }
+
+      showToast('Both files connected successfully', 'success');
     });
 
     disconnectFileBtn?.addEventListener('click', async () => {
@@ -136,18 +176,7 @@ export function setupSettingsListeners({
     });
 
     connectMealsFileBtn?.addEventListener('click', async () => {
-      const fileHandle = await selectMealsFile();
-      if (!fileHandle) return;
-
-      const mealsData = await loadMealsFromFile(fileHandle);
-      if (mealsData && Array.isArray(mealsData)) {
-        setMeals(mealsData.map(obj => hydrateMeal(obj)).filter(Boolean));
-        onMealsChanged?.();
-        await updateFileSystemUI();
-        showToast('Connected to menu.json', 'success');
-      } else {
-        showToast('Invalid menu file', 'error');
-      }
+      await connectMeals();
     });
 
     disconnectMealsFileBtn?.addEventListener('click', async () => {
@@ -162,6 +191,10 @@ export function setupSettingsListeners({
     if (connectIngredientsFileBtn) {
       connectIngredientsFileBtn.disabled = true;
       connectIngredientsFileBtn.innerHTML = '<span class="material-symbols-rounded">block</span> Not Supported';
+    }
+    if (connectBothFilesBtn) {
+      connectBothFilesBtn.disabled = true;
+      connectBothFilesBtn.innerHTML = '<span class="material-symbols-rounded">block</span> Not Supported';
     }
     if (ingredientsFileStatus) {
       ingredientsFileStatus.textContent = 'File System Access API not supported in this browser. Use Chrome or Edge.';

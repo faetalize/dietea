@@ -27,7 +27,7 @@ export function renderMenuCards() {
     card.className = 'menu-card';
     card.dataset.mealId = meal.id;
 
-    const typeClass = meal.type === 'Snack' ? 'snack' : '';
+    const typeClass = (meal.type || '').toLowerCase();
     const macros = meal.macros;
 
     card.innerHTML = `
