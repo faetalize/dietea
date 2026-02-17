@@ -244,7 +244,7 @@ function handleAddInstructionBlock() {
   closeAddInstructionModal();
 }
 
-function handleMealSave(onAfterSave) {
+async function handleMealSave(onAfterSave) {
   const modal = el('create-meal-modal');
   const nameInput = el('meal-name');
   const typeSelect = el('meal-type');
@@ -281,8 +281,14 @@ function handleMealSave(onAfterSave) {
 
     const updatedMeals = [...dataStore.meals];
     updatedMeals[existingIndex] = updatedMeal;
+    const previousMeals = [...dataStore.meals];
     setMeals(updatedMeals);
-    saveMeals();
+    const saved = await saveMeals();
+    if (!saved) {
+      setMeals(previousMeals);
+      showToast('Connect menu.json in Settings before saving meals', 'error');
+      return;
+    }
 
     closeCreateMealModal();
     showToast('Meal updated', 'success');
@@ -299,18 +305,31 @@ function handleMealSave(onAfterSave) {
   });
 
   const updatedMeals = [...dataStore.meals, newMeal];
+  const previousMeals = [...dataStore.meals];
   setMeals(updatedMeals);
-  saveMeals();
+  const saved = await saveMeals();
+  if (!saved) {
+    setMeals(previousMeals);
+    showToast('Connect menu.json in Settings before creating meals', 'error');
+    return;
+  }
 
   closeCreateMealModal();
   showToast('Meal created', 'success');
   onAfterSave?.();
 }
 
-export function deleteMeal(mealId, onAfterDelete) {
+export async function deleteMeal(mealId, onAfterDelete) {
+  const previousMeals = [...dataStore.meals];
   const updatedMeals = dataStore.meals.filter((m) => m.id !== mealId);
   setMeals(updatedMeals);
-  saveMeals();
+  const saved = await saveMeals();
+  if (!saved) {
+    setMeals(previousMeals);
+    showToast('Connect menu.json in Settings before deleting meals', 'error');
+    return;
+  }
+
   showToast('Meal deleted', 'success');
   onAfterDelete?.();
 }
@@ -330,7 +349,9 @@ export function setupMealCreationListeners({ onMealsChanged } = {}) {
 
   createBtn?.addEventListener('click', openCreateMealModal);
   cancelBtn?.addEventListener('click', closeCreateMealModal);
-  saveBtn?.addEventListener('click', () => handleMealSave(onMealsChanged));
+  saveBtn?.addEventListener('click', async () => {
+    await handleMealSave(onMealsChanged);
+  });
 
   addIngredientBtn?.addEventListener('click', openAddIngredientToMealModal);
   confirmAddIngredientBtn?.addEventListener('click', handleAddIngredientToMeal);

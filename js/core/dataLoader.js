@@ -17,3 +17,21 @@ export async function loadIngredients() {
   const raw = await response.json();
   return raw.map(item => new FoodItem(item));
 }
+
+export async function loadMeals() {
+  const candidates = ['./data/menu.json', './menu.json', './meals.json'];
+  let response = null;
+
+  for (const url of candidates) {
+    const r = await fetch(url, { cache: 'no-cache' });
+    if (r.ok) {
+      response = r;
+      break;
+    }
+  }
+
+  if (!response) return [];
+
+  const raw = await response.json();
+  return Array.isArray(raw) ? raw : [];
+}

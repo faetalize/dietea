@@ -8,36 +8,39 @@ import { serializeMeal } from '../core/mealSerde.js';
 import { 
   isFileSystemSupported, 
   saveIngredientsToFile, 
-  getFileHandle 
+  saveMealsToFile,
+  getIngredientsFileHandle,
+  getMealsFileHandle
 } from './fileSystem.js';
 
 /**
  * Save ingredients to file system or localStorage
  */
 export async function saveIngredients() {
-  // Save to file system if available
-  if (isFileSystemSupported() && getFileHandle()) {
-    const success = await saveIngredientsToFile(dataStore.ingredients);
-    if (success) {
-      console.log('Saved ingredients to file');
-      return true;
-    } else {
-      console.warn('Failed to save to file, falling back to localStorage');
-      localStorage.setItem('mealPrepIngredients', JSON.stringify(dataStore.ingredients));
-      return false;
-    }
-  } else {
-    // Fallback to localStorage
-    localStorage.setItem('mealPrepIngredients', JSON.stringify(dataStore.ingredients));
+  if (!isFileSystemSupported() || !getIngredientsFileHandle()) {
+    return false;
+  }
+
+  const success = await saveIngredientsToFile(dataStore.ingredients);
+  if (success) {
+    console.log('Saved ingredients to file');
     return true;
   }
+
+  return false;
 }
 
 /**
  * Save meals to localStorage
  */
-export function saveMeals() {
-  localStorage.setItem('mealPrepMeals', JSON.stringify(dataStore.meals.map(serializeMeal)));
+export async function saveMeals() {
+  if (!isFileSystemSupported() || !getMealsFileHandle()) {
+    return false;
+  }
+
+  const serialized = dataStore.meals.map(serializeMeal);
+  const success = await saveMealsToFile(serialized);
+  return success;
 }
 
 /**

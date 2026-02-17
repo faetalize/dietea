@@ -192,8 +192,16 @@ async function handleIngredientCreate() {
     lipid_per_unit: lipids
   });
 
-  setIngredients([...dataStore.ingredients, newItem]);
-  await saveIngredients();
+  const previousIngredients = [...dataStore.ingredients];
+  const nextIngredients = [...dataStore.ingredients, newItem];
+  setIngredients(nextIngredients);
+  const saved = await saveIngredients();
+  if (!saved) {
+    setIngredients(previousIngredients);
+    showToast('Connect ingredients.json in Settings before saving changes', 'error');
+    return;
+  }
+
   renderIngredients();
   clearIngredientForm();
   addIngredientForm?.classList.add('hidden');
@@ -223,8 +231,16 @@ async function handleIngredientsImport(event) {
       return;
     }
 
-    setIngredients([...dataStore.ingredients, ...newIngredients]);
-    await saveIngredients();
+    const previousIngredients = [...dataStore.ingredients];
+    const nextIngredients = [...dataStore.ingredients, ...newIngredients];
+    setIngredients(nextIngredients);
+    const saved = await saveIngredients();
+    if (!saved) {
+      setIngredients(previousIngredients);
+      showToast('Connect ingredients.json in Settings before importing', 'error');
+      return;
+    }
+
     renderIngredients();
     showToast(`Imported ${newIngredients.length} new ingredient${newIngredients.length === 1 ? '' : 's'}`, 'success');
   } catch (err) {
@@ -301,8 +317,15 @@ async function handleIngredientEdit() {
     return item;
   });
 
+  const previousIngredients = [...dataStore.ingredients];
   setIngredients(updatedIngredients);
-  await saveIngredients();
+  const saved = await saveIngredients();
+  if (!saved) {
+    setIngredients(previousIngredients);
+    showToast('Connect ingredients.json in Settings before saving changes', 'error');
+    return;
+  }
+
   renderIngredients();
   closeEditIngredientModal();
   showToast('Ingredient updated', 'success');
@@ -312,8 +335,15 @@ async function deleteIngredient(ingredientId) {
   const ingredient = dataStore.ingredients.find((i) => i.id === ingredientId);
   if (!ingredient) return;
 
+  const previousIngredients = [...dataStore.ingredients];
   setIngredients(dataStore.ingredients.filter((i) => i.id !== ingredientId));
-  await saveIngredients();
+  const saved = await saveIngredients();
+  if (!saved) {
+    setIngredients(previousIngredients);
+    showToast('Connect ingredients.json in Settings before deleting', 'error');
+    return;
+  }
+
   renderIngredients();
   showToast(`"${ingredient.name}" deleted`, 'success');
 }

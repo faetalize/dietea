@@ -6,15 +6,12 @@
 // Core data and models
 import { dataStore, setIngredients, setMeals, setSchedule, aggregateShoppingList, getMealById } from './js/core/dataStore.js';
 import { Meal, FoodItem } from './js/core/models.js';
-import { loadIngredients } from './js/core/dataLoader.js';
+import { loadIngredients, loadMeals } from './js/core/dataLoader.js';
 import { hydrateMeal } from './js/core/mealSerde.js';
 import { 
   isFileSystemSupported, 
-  selectIngredientsFile, 
-  loadIngredientsFromFile,
-  restoreFileHandle,
-  getFileHandle,
-  hasStoredFileHandle
+  getIngredientsFileHandle,
+  getMealsFileHandle,
 } from './js/services/fileSystem.js';
 
 // Services
@@ -33,6 +30,7 @@ import { renderScheduleOverview, setupScheduleListeners } from './js/components/
 import { renderMenuCards, filterMenuCards, setupMenuListeners } from './js/components/menu.js';
 import { setupMealCreationListeners } from './js/components/mealCreation.js';
 import { renderIngredients, filterIngredients, setupIngredientsListeners } from './js/components/ingredients.js';
+import { renderSupplements, setupSupplementsListeners } from './js/components/supplements.js';
 import { setupSettingsListeners } from './js/components/settings.js';
 import { renderProfileCard, setupProfileListeners } from './js/components/profile.js';
 
@@ -59,64 +57,22 @@ async function init() {
  * Bootstrap data from storage
  */
 async function bootstrapData() {
-  // Try to load ingredients from file system first
-  let ingredientsLoaded = false;
-  
-  if (isFileSystemSupported()) {
-    const hasHandle = await hasStoredFileHandle();
-    if (hasHandle) {
-      const fileHandle = await restoreFileHandle();
-      if (fileHandle) {
-        const ingredientsData = await loadIngredientsFromFile(fileHandle);
-        if (ingredientsData && Array.isArray(ingredientsData)) {
-          const items = ingredientsData.map(obj => new FoodItem(obj));
-          setIngredients(items);
-          ingredientsLoaded = true;
-          console.log('Loaded ingredients from file system');
-        }
-      }
-    }
-  }
-  
-  // Fallback to localStorage if file system didn't work
-  if (!ingredientsLoaded) {
-    const savedIngredients = localStorage.getItem('mealPrepIngredients');
-    if (savedIngredients) {
-      try {
-        const parsed = JSON.parse(savedIngredients);
-        const items = Array.isArray(parsed) ? parsed.map(obj => new FoodItem(obj)) : [];
-        setIngredients(items);
-      } catch (err) {
-        console.error('Failed to load saved ingredients', err);
-        setIngredients([]);
-      }
-    } else {
-      // Final fallback: load bundled ingredients.json on first run
-      try {
-        const items = await loadIngredients();
-        setIngredients(items);
-        ingredientsLoaded = true;
-      } catch (err) {
-        console.warn('Could not load bundled ingredients.json', err);
-        setIngredients([]);
-      }
-    }
+  // Ingredients source of truth: bundled ingredients.json
+  try {
+    const items = await loadIngredients();
+    setIngredients(items);
+  } catch (err) {
+    console.warn('Could not load bundled ingredients.json', err);
+    setIngredients([]);
   }
 
-  // Load meals from localStorage
-  const savedMeals = localStorage.getItem('mealPrepMeals');
-  if (savedMeals) {
-    try {
-      const parsed = JSON.parse(savedMeals);
-      const meals = Array.isArray(parsed)
-        ? parsed.map(obj => hydrateMeal(obj))
-        : [];
-      setMeals(meals);
-    } catch (err) {
-      console.error('Failed to load saved meals', err);
-      setMeals([]);
-    }
-  } else {
+  // Meals source of truth: bundled menu.json
+  try {
+    const mealObjects = await loadMeals();
+    const meals = mealObjects.map(obj => hydrateMeal(obj));
+    setMeals(meals.filter(Boolean));
+  } catch (err) {
+    console.warn('Could not load bundled menu.json', err);
     setMeals([]);
   }
 
@@ -182,7 +138,14 @@ function showApp() {
   renderScheduleOverview();
   renderMenuCards();
   renderIngredients();
+  renderSupplements();
   renderProfileCard();
+
+  if (isFileSystemSupported() && (!getIngredientsFileHandle() || !getMealsFileHandle())) {
+    setTimeout(() => {
+      showToast('Connect ingredients.json and menu.json in Settings before saving changes.', 'default');
+    }, 300);
+  }
 }
 
 /**
@@ -223,12 +186,40 @@ function setupEventListeners() {
     showToast('Shopping list reset', 'success');
   });
   
-  setupSettingsListeners();
+  setupSettingsListeners({
+    onScheduleChanged: () => {
+      renderSchedule();
+      renderScheduleOverview();
+      renderShoppingList();
+    },
+    onIngredientsChanged: () => {
+      renderIngredients();
+      renderMenuCards();
+      renderSchedule();
+      renderScheduleOverview();
+      renderShoppingList();
+    },
+    onMealsChanged: () => {
+      renderMenuCards();
+      renderSchedule();
+      renderScheduleOverview();
+      renderShoppingList();
+    },
+    onShowOnboarding: showOnboarding
+  });
   setupProfileListeners();
   setupScheduleListeners();
-  setupMealCreationListeners();
+  setupMealCreationListeners({
+    onMealsChanged: () => {
+      renderMenuCards();
+      renderSchedule();
+      renderScheduleOverview();
+      renderShoppingList();
+    }
+  });
   setupMenuListeners();
   setupIngredientsListeners();
+  setupSupplementsListeners();
   setupMealDetailNavigation();
   
   setupSearchListeners();
@@ -304,12 +295,6 @@ async function handleOnboardingSubmit() {
     showToast(`Daily target: ${state.profile.recommendedCalories} kcal${direction ? ` (${Math.abs(diff)} kcal ${direction})` : ''}`, 'success');
   }
   
-  // Prompt to connect ingredients file if supported
-  if (isFileSystemSupported() && !getFileHandle() && dataStore.ingredients.length === 0) {
-    setTimeout(async () => {
-      showToast('Tip: Connect ingredients.json from Settings to enable auto-sync.', 'default');
-    }, 500);
-  }
 }
 
 /**

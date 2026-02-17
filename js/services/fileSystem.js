@@ -1,6 +1,7 @@
-// File System Access API integration for ingredients.json
+// File System Access API integration for ingredients.json and menu.json
 
 let ingredientsFileHandle = null;
+let mealsFileHandle = null;
 
 /**
  * Check if File System Access API is supported
@@ -13,17 +14,50 @@ export function isFileSystemSupported() {
  * Prompt user to select ingredients.json file
  */
 export async function selectIngredientsFile() {
+  return selectJsonFile('Ingredients JSON', (fileHandle) => {
+    ingredientsFileHandle = fileHandle;
+  });
+}
+
+export async function selectMealsFile() {
+  return selectJsonFile('Menu JSON', (fileHandle) => {
+    mealsFileHandle = fileHandle;
+  });
+}
+
+/**
+ * Load ingredients from the selected file
+ */
+export async function loadIngredientsFromFile(fileHandle = ingredientsFileHandle) {
+  return loadJsonFromFile(fileHandle, 'ingredients');
+}
+
+export async function loadMealsFromFile(fileHandle = mealsFileHandle) {
+  return loadJsonFromFile(fileHandle, 'menu');
+}
+
+/**
+ * Save ingredients to the file
+ */
+export async function saveIngredientsToFile(ingredients, fileHandle = ingredientsFileHandle) {
+  return saveJsonToFile(ingredients, fileHandle, 'ingredients');
+}
+
+export async function saveMealsToFile(meals, fileHandle = mealsFileHandle) {
+  return saveJsonToFile(meals, fileHandle, 'menu');
+}
+
+async function selectJsonFile(description, assignHandle) {
   try {
     const [fileHandle] = await window.showOpenFilePicker({
       types: [{
-        description: 'Ingredients JSON',
+        description,
         accept: { 'application/json': ['.json'] }
       }],
       multiple: false
     });
-    
-    ingredientsFileHandle = fileHandle;
-    await saveFileHandlePermission(fileHandle);
+
+    assignHandle(fileHandle);
     return fileHandle;
   } catch (err) {
     if (err.name !== 'AbortError') {
@@ -33,39 +67,32 @@ export async function selectIngredientsFile() {
   }
 }
 
-/**
- * Load ingredients from the selected file
- */
-export async function loadIngredientsFromFile(fileHandle = ingredientsFileHandle) {
+async function loadJsonFromFile(fileHandle, label) {
   if (!fileHandle) return null;
-  
+
   try {
     const file = await fileHandle.getFile();
     const text = await file.text();
     return JSON.parse(text);
   } catch (err) {
-    console.error('Failed to read ingredients file:', err);
+    console.error(`Failed to read ${label} file:`, err);
     return null;
   }
 }
 
-/**
- * Save ingredients to the file
- */
-export async function saveIngredientsToFile(ingredients, fileHandle = ingredientsFileHandle) {
+async function saveJsonToFile(data, fileHandle, label) {
   if (!fileHandle) return false;
-  
+
   try {
-    // Request write permission if needed
     const permission = await verifyPermission(fileHandle, true);
     if (!permission) return false;
-    
+
     const writable = await fileHandle.createWritable();
-    await writable.write(JSON.stringify(ingredients, null, 2));
+    await writable.write(JSON.stringify(data, null, 2));
     await writable.close();
     return true;
   } catch (err) {
-    console.error('Failed to save ingredients file:', err);
+    console.error(`Failed to save ${label} file:`, err);
     return false;
   }
 }
@@ -90,77 +117,19 @@ async function verifyPermission(fileHandle, withWrite = false) {
 }
 
 /**
- * Save file handle to IndexedDB for persistence across sessions
- */
-async function saveFileHandlePermission(fileHandle) {
-  try {
-    const db = await openDB();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction('fileHandles', 'readwrite');
-      const store = tx.objectStore('fileHandles');
-      const request = store.put(fileHandle, 'ingredientsFile');
-      
-      request.onsuccess = () => resolve(true);
-      request.onerror = () => reject(request.error);
-      tx.oncomplete = () => db.close();
-    });
-  } catch (err) {
-    console.warn('Could not persist file handle:', err);
-  }
-}
-
-/**
  * Restore file handle from previous session
+ * Not supported in strict file-only mode without IndexedDB/localStorage.
  */
 export async function restoreFileHandle() {
-  try {
-    const db = await openDB();
-    const handle = await new Promise((resolve, reject) => {
-      const tx = db.transaction('fileHandles', 'readonly');
-      const store = tx.objectStore('fileHandles');
-      const request = store.get('ingredientsFile');
-      
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-      tx.oncomplete = () => db.close();
-    });
-    
-    if (handle) {
-      // Check if we have permission (will prompt user if needed on first access)
-      const hasPermission = await verifyPermission(handle, false);
-      if (hasPermission) {
-        ingredientsFileHandle = handle;
-        return handle;
-      } else {
-        console.log('Permission not granted for stored file handle');
-        // Still set the handle - user might grant permission later
-        ingredientsFileHandle = handle;
-        return null;
-      }
-    }
-  } catch (err) {
-    console.warn('Could not restore file handle:', err);
-  }
   return null;
 }
 
 /**
  * Open IndexedDB for storing file handles
+ * Disabled in strict file-only mode.
  */
 function openDB() {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open('MealPrepFileSystem', 1);
-    
-    request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve(request.result);
-    
-    request.onupgradeneeded = (event) => {
-      const db = event.target.result;
-      if (!db.objectStoreNames.contains('fileHandles')) {
-        db.createObjectStore('fileHandles');
-      }
-    };
-  });
+  return null;
 }
 
 /**
@@ -168,20 +137,18 @@ function openDB() {
  */
 export async function clearFileHandle() {
   ingredientsFileHandle = null;
-  try {
-    const db = await openDB();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction('fileHandles', 'readwrite');
-      const store = tx.objectStore('fileHandles');
-      const request = store.delete('ingredientsFile');
-      
-      request.onsuccess = () => resolve(true);
-      request.onerror = () => reject(request.error);
-      tx.oncomplete = () => db.close();
-    });
-  } catch (err) {
-    console.warn('Could not clear file handle:', err);
-  }
+  mealsFileHandle = null;
+  return true;
+}
+
+export async function clearIngredientsFileHandle() {
+  ingredientsFileHandle = null;
+  return true;
+}
+
+export async function clearMealsFileHandle() {
+  mealsFileHandle = null;
+  return true;
 }
 
 /**
@@ -191,54 +158,26 @@ export function getFileHandle() {
   return ingredientsFileHandle;
 }
 
+export function getIngredientsFileHandle() {
+  return ingredientsFileHandle;
+}
+
+export function getMealsFileHandle() {
+  return mealsFileHandle;
+}
+
 /**
  * Check if a file handle is stored (even if permission not yet granted)
+ * Disabled in strict file-only mode.
  */
 export async function hasStoredFileHandle() {
-  try {
-    const db = await openDB();
-    const handle = await new Promise((resolve, reject) => {
-      const tx = db.transaction('fileHandles', 'readonly');
-      const store = tx.objectStore('fileHandles');
-      const request = store.get('ingredientsFile');
-      
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-      tx.oncomplete = () => db.close();
-    });
-    return !!handle;
-  } catch (err) {
-    return false;
-  }
+  return false;
 }
 
 /**
  * Request permission and load from stored file handle
- * Returns the loaded data or null if permission denied/no handle
+ * Disabled in strict file-only mode.
  */
 export async function requestPermissionAndLoad() {
-  try {
-    const db = await openDB();
-    const handle = await new Promise((resolve, reject) => {
-      const tx = db.transaction('fileHandles', 'readonly');
-      const store = tx.objectStore('fileHandles');
-      const request = store.get('ingredientsFile');
-      
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-      tx.oncomplete = () => db.close();
-    });
-    
-    if (!handle) return null;
-    
-    // Request permission - this will show a prompt to the user
-    const hasPermission = await verifyPermission(handle, false);
-    if (hasPermission) {
-      ingredientsFileHandle = handle;
-      return await loadIngredientsFromFile(handle);
-    }
-  } catch (err) {
-    console.warn('Could not request permission:', err);
-  }
   return null;
 }

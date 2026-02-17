@@ -7,14 +7,19 @@ import { FoodItem } from '../core/models.js';
 import {
   isFileSystemSupported,
   selectIngredientsFile,
+  selectMealsFile,
   loadIngredientsFromFile,
+  loadMealsFromFile,
   clearFileHandle,
-  getFileHandle,
-  hasStoredFileHandle,
-  requestPermissionAndLoad
+  clearIngredientsFileHandle,
+  clearMealsFileHandle,
+  getIngredientsFileHandle,
+  getMealsFileHandle
 } from '../services/fileSystem.js';
+import { loadIngredients, loadMeals } from '../core/dataLoader.js';
+import { hydrateMeal } from '../core/mealSerde.js';
 import { state, updateState, saveState, resetState } from '../services/state.js';
-import { saveIngredients, saveSchedule } from '../services/storage.js';
+import { saveIngredients, saveMeals, saveSchedule } from '../services/storage.js';
 import { showToast } from '../utils/feedback.js';
 
 function setupDestructiveAction(button, onConfirm) {
@@ -51,10 +56,15 @@ export function setupSettingsListeners({
   const deleteIngredientsBtn = document.getElementById('delete-ingredients-data');
   const deleteAllBtn = document.getElementById('delete-all-data');
 
-  const connectFileBtn = document.getElementById('connect-ingredients-file');
+  const connectIngredientsFileBtn = document.getElementById('connect-ingredients-file');
   const disconnectFileBtn = document.getElementById('disconnect-ingredients-file');
-  const fileStatus = document.getElementById('file-status');
-  const disconnectItem = document.getElementById('disconnect-file-item');
+  const ingredientsFileStatus = document.getElementById('ingredients-file-status');
+  const disconnectIngredientsItem = document.getElementById('disconnect-ingredients-item');
+
+  const connectMealsFileBtn = document.getElementById('connect-meals-file');
+  const disconnectMealsFileBtn = document.getElementById('disconnect-meals-file');
+  const mealsFileStatus = document.getElementById('meals-file-status');
+  const disconnectMealsItem = document.getElementById('disconnect-meals-item');
 
   if (settingsStartDay) {
     settingsStartDay.value = String(state.startDay);
@@ -66,50 +76,42 @@ export function setupSettingsListeners({
   }
 
   async function updateFileSystemUI() {
-    const hasFile = !!getFileHandle();
-    const hasStoredHandle = await hasStoredFileHandle();
+    const hasIngredientsFile = !!getIngredientsFileHandle();
+    const hasMealsFile = !!getMealsFileHandle();
 
-    if (!fileStatus || !disconnectItem || !connectFileBtn) return;
-
-    if (hasFile) {
-      fileStatus.textContent = '✓ Connected to ingredients.json - changes auto-save';
-      fileStatus.style.color = 'var(--success)';
-      disconnectItem.style.display = 'flex';
-      connectFileBtn.innerHTML = '<span class="material-symbols-rounded">sync</span> Reconnect';
-      return;
+    if (ingredientsFileStatus && disconnectIngredientsItem && connectIngredientsFileBtn) {
+      if (hasIngredientsFile) {
+        ingredientsFileStatus.textContent = '✓ Connected to ingredients.json - changes auto-save';
+        ingredientsFileStatus.style.color = 'var(--success)';
+        disconnectIngredientsItem.style.display = 'flex';
+        connectIngredientsFileBtn.innerHTML = '<span class="material-symbols-rounded">sync</span> Connect Other File';
+      } else {
+        ingredientsFileStatus.textContent = 'No file connected. Changes require selecting ingredients.json each session.';
+        ingredientsFileStatus.style.color = '';
+        disconnectIngredientsItem.style.display = 'none';
+        connectIngredientsFileBtn.innerHTML = '<span class="material-symbols-rounded">attach_file</span> Select File';
+      }
     }
 
-    if (hasStoredHandle) {
-      fileStatus.textContent = '⚠ File connected but needs permission - click Reconnect';
-      fileStatus.style.color = 'var(--warning)';
-      disconnectItem.style.display = 'flex';
-      connectFileBtn.innerHTML = '<span class="material-symbols-rounded">lock_open</span> Reconnect';
-      return;
+    if (mealsFileStatus && disconnectMealsItem && connectMealsFileBtn) {
+      if (hasMealsFile) {
+        mealsFileStatus.textContent = '✓ Connected to menu.json - changes auto-save';
+        mealsFileStatus.style.color = 'var(--success)';
+        disconnectMealsItem.style.display = 'flex';
+        connectMealsFileBtn.innerHTML = '<span class="material-symbols-rounded">sync</span> Connect Other File';
+      } else {
+        mealsFileStatus.textContent = 'No file connected. Changes require selecting menu.json each session.';
+        mealsFileStatus.style.color = '';
+        disconnectMealsItem.style.display = 'none';
+        connectMealsFileBtn.innerHTML = '<span class="material-symbols-rounded">attach_file</span> Select File';
+      }
     }
-
-    fileStatus.textContent = 'Connect to ingredients.json file for automatic sync';
-    fileStatus.style.color = '';
-    disconnectItem.style.display = 'none';
-    connectFileBtn.innerHTML = '<span class="material-symbols-rounded">attach_file</span> Select File';
   }
 
-  if (connectFileBtn && isFileSystemSupported()) {
+  if (isFileSystemSupported()) {
     updateFileSystemUI();
 
-    connectFileBtn.addEventListener('click', async () => {
-      const stored = await hasStoredFileHandle();
-
-      if (stored && !getFileHandle()) {
-        const ingredientsData = await requestPermissionAndLoad();
-        if (ingredientsData && Array.isArray(ingredientsData)) {
-          setIngredients(ingredientsData.map((obj) => new FoodItem(obj)));
-          onIngredientsChanged?.();
-          await updateFileSystemUI();
-          showToast('Reconnected to ingredients.json', 'success');
-          return;
-        }
-      }
-
+    connectIngredientsFileBtn?.addEventListener('click', async () => {
       const fileHandle = await selectIngredientsFile();
       if (!fileHandle) return;
 
@@ -125,15 +127,52 @@ export function setupSettingsListeners({
     });
 
     disconnectFileBtn?.addEventListener('click', async () => {
-      await clearFileHandle();
+      await clearIngredientsFileHandle();
+      const defaultIngredients = await loadIngredients();
+      setIngredients(defaultIngredients);
+      onIngredientsChanged?.();
       await updateFileSystemUI();
-      showToast('Disconnected from file', 'success');
+      showToast('Disconnected. Reverted to bundled ingredients.json', 'success');
     });
-  } else if (connectFileBtn && !isFileSystemSupported()) {
-    connectFileBtn.disabled = true;
-    connectFileBtn.innerHTML = '<span class="material-symbols-rounded">block</span> Not Supported';
-    if (fileStatus) {
-      fileStatus.textContent = 'File System Access API not supported in this browser. Use Chrome or Edge.';
+
+    connectMealsFileBtn?.addEventListener('click', async () => {
+      const fileHandle = await selectMealsFile();
+      if (!fileHandle) return;
+
+      const mealsData = await loadMealsFromFile(fileHandle);
+      if (mealsData && Array.isArray(mealsData)) {
+        setMeals(mealsData.map(obj => hydrateMeal(obj)).filter(Boolean));
+        onMealsChanged?.();
+        await updateFileSystemUI();
+        showToast('Connected to menu.json', 'success');
+      } else {
+        showToast('Invalid menu file', 'error');
+      }
+    });
+
+    disconnectMealsFileBtn?.addEventListener('click', async () => {
+      await clearMealsFileHandle();
+      const defaultMeals = await loadMeals();
+      setMeals(defaultMeals.map(obj => hydrateMeal(obj)).filter(Boolean));
+      onMealsChanged?.();
+      await updateFileSystemUI();
+      showToast('Disconnected. Reverted to bundled menu.json', 'success');
+    });
+  } else {
+    if (connectIngredientsFileBtn) {
+      connectIngredientsFileBtn.disabled = true;
+      connectIngredientsFileBtn.innerHTML = '<span class="material-symbols-rounded">block</span> Not Supported';
+    }
+    if (ingredientsFileStatus) {
+      ingredientsFileStatus.textContent = 'File System Access API not supported in this browser. Use Chrome or Edge.';
+    }
+
+    if (connectMealsFileBtn) {
+      connectMealsFileBtn.disabled = true;
+      connectMealsFileBtn.innerHTML = '<span class="material-symbols-rounded">block</span> Not Supported';
+    }
+    if (mealsFileStatus) {
+      mealsFileStatus.textContent = 'File System Access API not supported in this browser. Use Chrome or Edge.';
     }
   }
 
@@ -146,24 +185,36 @@ export function setupSettingsListeners({
   });
 
   setupDestructiveAction(deleteIngredientsBtn, async () => {
+    if (!getIngredientsFileHandle()) {
+      showToast('Connect ingredients.json first', 'error');
+      return;
+    }
+
     setIngredients([]);
-    await saveIngredients();
+    const saved = await saveIngredients();
+    if (!saved) {
+      showToast('Failed to save ingredients.json', 'error');
+      return;
+    }
+
     onIngredientsChanged?.();
     showToast('All ingredients deleted', 'success');
   });
 
   setupDestructiveAction(deleteAllBtn, async () => {
     localStorage.removeItem('mealPrepState');
-    localStorage.removeItem('mealPrepIngredients');
-    localStorage.removeItem('mealPrepMeals');
     localStorage.removeItem('mealPrepSchedule');
 
     await clearFileHandle();
 
     resetState();
-    setIngredients([]);
-    setMeals([]);
+    const defaultIngredients = await loadIngredients();
+    const defaultMeals = await loadMeals();
+    setIngredients(defaultIngredients);
+    setMeals(defaultMeals.map(obj => hydrateMeal(obj)).filter(Boolean));
     setSchedule([]);
+    await saveIngredients();
+    await saveMeals();
     saveSchedule();
 
     showToast('All data deleted', 'success');

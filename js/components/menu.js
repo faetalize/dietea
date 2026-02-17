@@ -78,9 +78,9 @@ export function renderMenuCards() {
       card.classList.remove('confirming-delete');
     });
 
-    card.querySelector('[data-action="confirm-delete"]').addEventListener('click', (e) => {
+    card.querySelector('[data-action="confirm-delete"]').addEventListener('click', async (e) => {
       e.stopPropagation();
-      deleteMeal(meal.id, renderMenuCards);
+      await deleteMeal(meal.id, renderMenuCards);
     });
 
     menuCards.appendChild(card);
@@ -137,8 +137,14 @@ async function handleMealsImport(event) {
       return meal;
     });
 
+    const previousMeals = [...dataStore.meals];
     setMeals([...dataStore.meals, ...mealsToAdd]);
-    saveMeals();
+    const saved = await saveMeals();
+    if (!saved) {
+      setMeals(previousMeals);
+      showToast('Connect menu.json in Settings before importing meals', 'error');
+      return;
+    }
 
     renderMenuCards();
     showToast(`Imported ${mealsToAdd.length} meal${mealsToAdd.length === 1 ? '' : 's'}`, 'success');

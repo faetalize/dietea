@@ -116,6 +116,10 @@
                     <span class="material-symbols-rounded">nutrition</span>
                     <span class="tab-label">Ingredients</span>
                 </button>
+                <button class="tab-btn" data-tab="supplements">
+                    <span class="material-symbols-rounded">medication</span>
+                    <span class="tab-label">Supplements</span>
+                </button>
             </div>
             <button id="settings-btn" class="settings-btn" aria-label="Settings">
                 <span class="material-symbols-rounded">settings</span>
@@ -278,6 +282,18 @@
                 <div id="ingredients-list" class="ingredients-list"></div>
             </section>
 
+            <!-- Supplements Tab -->
+            <section id="supplements-tab" class="tab-panel">
+                <div class="section-header">
+                    <h1>Supplements Tracker</h1>
+                    <button id="supplements-reset-btn" class="btn btn-secondary">
+                        <span class="material-symbols-rounded">restart_alt</span>
+                        Reset Day
+                    </button>
+                </div>
+                <div id="supplements-content"></div>
+            </section>
+
             <!-- Meal Detail Page -->
             <section id="meal-detail" class="tab-panel">
                 <button id="back-to-menu" class="btn btn-back">
@@ -358,19 +374,39 @@
                         <div class="setting-item">
                             <div class="setting-info">
                                 <span class="setting-label">Ingredients Database</span>
-                                <span class="setting-description" id="file-status">Connect to ingredients.json file for automatic sync</span>
+                                <span class="setting-description" id="ingredients-file-status">Connect to ingredients.json file for automatic sync</span>
                             </div>
                             <button id="connect-ingredients-file" class="btn btn-primary">
                                 <span class="material-symbols-rounded">attach_file</span>
                                 Select File
                             </button>
                         </div>
-                        <div class="setting-item" id="disconnect-file-item" style="display: none;">
+                        <div class="setting-item" id="disconnect-ingredients-item" style="display: none;">
                             <div class="setting-info">
-                                <span class="setting-label">Disconnect File</span>
+                                <span class="setting-label">Disconnect Ingredients File</span>
                                 <span class="setting-description">Stop syncing with ingredients.json</span>
                             </div>
                             <button id="disconnect-ingredients-file" class="btn btn-secondary">
+                                <span class="material-symbols-rounded">link_off</span>
+                                Disconnect
+                            </button>
+                        </div>
+                        <div class="setting-item">
+                            <div class="setting-info">
+                                <span class="setting-label">Menu Database</span>
+                                <span class="setting-description" id="meals-file-status">Connect to menu.json file for automatic sync</span>
+                            </div>
+                            <button id="connect-meals-file" class="btn btn-primary">
+                                <span class="material-symbols-rounded">attach_file</span>
+                                Select File
+                            </button>
+                        </div>
+                        <div class="setting-item" id="disconnect-meals-item" style="display: none;">
+                            <div class="setting-info">
+                                <span class="setting-label">Disconnect Menu File</span>
+                                <span class="setting-description">Stop syncing with menu.json</span>
+                            </div>
+                            <button id="disconnect-meals-file" class="btn btn-secondary">
                                 <span class="material-symbols-rounded">link_off</span>
                                 Disconnect
                             </button>

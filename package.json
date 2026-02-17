@@ -3,8 +3,8 @@
   "version": "1.0.0",
   "description": "Meal prep planner with automatic ingredient syncing",
   "scripts": {
-    "dev": "npx live-server --ignore=data --port=3000",
-    "start": "npx live-server --ignore=data --port=3000"
+    "dev": "npx live-server --ignore=data --ignorePattern='(ingredients\\.json(\\.crswap)?$|menu\\.json(\\.crswap)?$|Zone\\.Identifier$|\\.crswap$)' --port=3000",
+    "start": "npx live-server --ignore=data --ignorePattern='(ingredients\\.json(\\.crswap)?$|menu\\.json(\\.crswap)?$|Zone\\.Identifier$|\\.crswap$)' --port=3000"
   },
   "keywords": ["meal-prep", "nutrition", "vanilla-js"],
   "license": "MIT"

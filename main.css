@@ -2360,6 +2360,158 @@ body {
     font-size: 0.8rem;
 }
 
+/* Supplements Tracker */
+.supplements-summary {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.supplement-stat {
+    background: var(--surface);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius);
+    padding: 0.9rem 1rem;
+    box-shadow: var(--shadow-sm);
+}
+
+.supplement-stat-label {
+    display: block;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    margin-bottom: 0.25rem;
+}
+
+.supplement-stat-value {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text);
+}
+
+.supplements-water-card {
+    background: var(--surface);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius);
+    padding: 1rem;
+    box-shadow: var(--shadow-sm);
+    margin-bottom: 1rem;
+}
+
+.supplements-water-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 0.75rem;
+}
+
+.supplements-water-header h3 {
+    font-size: 1rem;
+    margin: 0;
+}
+
+.supplements-inline-setting {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.supplements-inline-setting input {
+    width: 86px;
+    padding: 0.4rem 0.5rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--text);
+    font-family: inherit;
+}
+
+.supplements-progress-track {
+    width: 100%;
+    height: 10px;
+    border-radius: 999px;
+    background: var(--border-light);
+    overflow: hidden;
+    margin-bottom: 0.75rem;
+}
+
+.supplements-progress-fill {
+    height: 100%;
+    background: var(--primary);
+    transition: width 0.25s ease;
+}
+
+.supplements-water-actions {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.supplements-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.supplement-item {
+    background: var(--surface);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius);
+    padding: 0.85rem;
+    box-shadow: var(--shadow-sm);
+    display: flex;
+    gap: 0.75rem;
+    align-items: flex-start;
+}
+
+.supplement-item.is-complete {
+    border-color: var(--primary-light);
+    background: color-mix(in srgb, var(--primary-light) 35%, var(--surface));
+}
+
+.supplement-toggle {
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 0.125rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.supplement-item.is-complete .supplement-toggle {
+    color: var(--primary);
+}
+
+.supplement-main {
+    flex: 1;
+}
+
+.supplement-main h3 {
+    margin: 0;
+    font-size: 1rem;
+}
+
+.supplement-main p {
+    margin: 0.2rem 0 0.5rem;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.supplement-meta {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+    font-size: 0.82rem;
+    color: var(--text-muted);
+}
+
 /* Responsive */
 @media (max-width: 600px) {
     .tab-btn {
@@ -2421,6 +2573,19 @@ body {
 
     .instructions-list li {
         padding-left: 3.5rem;
+    }
+
+    .supplements-summary {
+        grid-template-columns: 1fr;
+    }
+
+    .supplements-water-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .supplement-meta {
+        grid-template-columns: 1fr;
     }
 }
 
