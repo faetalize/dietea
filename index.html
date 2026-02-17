@@ -336,6 +336,25 @@
                                 <span class="calorie-value" id="profile-difference">--</span>
                             </div>
                         </div>
+                        <div class="profile-nutrition-grid">
+                            <div class="profile-nutrition-card">
+                                <span class="calorie-label">Daily Min/Max Protein</span>
+                                <span class="profile-nutrition-value" id="profile-protein-range">-- g - -- g</span>
+                                <span class="profile-nutrition-subtext">Based on 1.0g/kg to 1.6g/kg body weight</span>
+                            </div>
+                            <div id="macro-breakdown-card" class="profile-nutrition-card profile-nutrition-card-wide" role="button" tabindex="0" aria-label="Toggle macro breakdown view">
+                                <div class="profile-macro-header">
+                                    <span class="calorie-label">Daily Macro Split</span>
+                                    <span class="profile-macro-mode" id="macro-view-label">Percent</span>
+                                </div>
+                                <div class="profile-macro-content">
+                                    <div class="profile-macro-wheel" id="macro-wheel" aria-hidden="true"></div>
+                                    <div class="profile-macro-legend" id="macro-breakdown-values"></div>
+                                </div>
+                                <span class="profile-macro-note" id="macro-breakdown-note">Protein fixed at 1.6g/kg, fats targeted at 0.8g/kg with 0.6g/kg floor, carbs fill the remaining calories.</span>
+                                <span class="profile-nutrition-subtext">Click to toggle: % → kcal → grams</span>
+                            </div>
+                        </div>
                         <div class="profile-goal">
                             <span class="material-symbols-rounded">flag</span>
                             <span id="profile-goal-text">No goal set</span>

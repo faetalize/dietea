@@ -10,6 +10,15 @@ import {
 } from '../services/calories.js';
 import { showToast, showFieldError, clearValidationErrors } from '../utils/feedback.js';
 
+const MACRO_COLORS = {
+  protein: 'var(--primary)',
+  carbs: 'var(--secondary)',
+  fats: 'var(--text-secondary)'
+};
+
+const MACRO_VIEW_MODES = ['percent', 'kcal', 'grams'];
+let macroViewIndex = 0;
+
 function el(id) {
   return document.getElementById(id);
 }
@@ -24,6 +33,10 @@ export function renderProfileCard() {
   const targetEl = el('profile-target');
   const differenceEl = el('profile-difference');
   const goalTextEl = el('profile-goal-text');
+  const proteinRangeEl = el('profile-protein-range');
+  const macroViewLabelEl = el('macro-view-label');
+  const macroValuesEl = el('macro-breakdown-values');
+  const macroWheelEl = el('macro-wheel');
 
   if (profile.age && profile.weight && profile.height) {
     statsSummary.textContent = `${profile.age}y, ${profile.weight}kg, ${profile.height}cm, ${profile.sex}`;
@@ -79,6 +92,96 @@ export function renderProfileCard() {
     goalTextEl.textContent = 'No goal set';
     goalTextEl.closest('.profile-goal')?.classList.remove('profile-goal-warning');
   }
+
+  const weight = Number(profile.weight);
+  const proteinMin = Number.isFinite(weight) && weight > 0 ? Math.round(weight * 1.0) : null;
+  const proteinMax = Number.isFinite(weight) && weight > 0 ? Math.round(weight * 1.6) : null;
+  if (proteinRangeEl) {
+    proteinRangeEl.textContent = proteinMin && proteinMax ? `${proteinMin} g - ${proteinMax} g` : '-- g - -- g';
+  }
+
+  const targetCalories = profile.recommendedCalories || profile.maintenanceCalories || 2000;
+  renderMacroBreakdown(targetCalories, macroViewLabelEl, macroValuesEl, macroWheelEl);
+}
+
+function renderMacroBreakdown(targetCalories, modeEl, valuesEl, wheelEl) {
+  const mode = MACRO_VIEW_MODES[macroViewIndex];
+  const weight = Number(state.profile?.weight);
+  const safeWeight = Number.isFinite(weight) && weight > 0 ? weight : 75;
+
+  const proteinG = Math.round(safeWeight * 1.6);
+  const proteinKcal = proteinG * 4;
+
+  const fatTargetG = Math.round(safeWeight * 0.8);
+  const fatFloorG = Math.round(safeWeight * 0.6);
+  const maxFatByRemaining = Math.max(0, Math.floor((targetCalories - proteinKcal) / 9));
+
+  let fatsG = fatTargetG;
+  if (fatsG > maxFatByRemaining) {
+    fatsG = Math.max(Math.min(fatFloorG, maxFatByRemaining), 0);
+  }
+
+  const fatsKcal = fatsG * 9;
+  const carbsKcal = Math.max(0, targetCalories - proteinKcal - fatsKcal);
+  const carbsG = Math.round(carbsKcal / 4);
+  const noteEl = el('macro-breakdown-note');
+
+  const proteinPct = targetCalories > 0 ? Math.round((proteinKcal / targetCalories) * 100) : 0;
+  const fatsPct = targetCalories > 0 ? Math.round((fatsKcal / targetCalories) * 100) : 0;
+  const carbsPct = Math.max(0, 100 - proteinPct - fatsPct);
+
+  const rowsByMode = {
+    percent: [
+      { key: 'protein', label: 'Protein', value: `${proteinPct}%` },
+      { key: 'carbs', label: 'Carbs', value: `${carbsPct}%` },
+      { key: 'fats', label: 'Fats', value: `${fatsPct}%` }
+    ],
+    kcal: [
+      { key: 'protein', label: 'Protein', value: `${proteinKcal} kcal` },
+      { key: 'carbs', label: 'Carbs', value: `${carbsKcal} kcal` },
+      { key: 'fats', label: 'Fats', value: `${fatsKcal} kcal` }
+    ],
+    grams: [
+      { key: 'protein', label: 'Protein', value: `${proteinG} g` },
+      { key: 'carbs', label: 'Carbs', value: `${carbsG} g` },
+      { key: 'fats', label: 'Fats', value: `${fatsG} g` }
+    ]
+  };
+
+  if (modeEl) {
+    const modeLabels = { percent: 'Percent', kcal: 'Calories', grams: 'Grams' };
+    modeEl.textContent = modeLabels[mode] || 'Percent';
+  }
+
+  if (valuesEl) {
+    valuesEl.innerHTML = rowsByMode[mode]
+      .map((row) => `
+        <div class="profile-macro-row">
+          <span class="profile-macro-left">
+            <span class="profile-macro-dot" style="background:${MACRO_COLORS[row.key]}"></span>
+            ${row.label}
+          </span>
+          <strong>${row.value}</strong>
+        </div>
+      `)
+      .join('');
+  }
+
+  if (wheelEl) {
+    const proteinEnd = proteinPct;
+    const carbsEnd = proteinPct + carbsPct;
+    wheelEl.style.background = `conic-gradient(${MACRO_COLORS.protein} 0 ${proteinEnd}%, ${MACRO_COLORS.carbs} ${proteinEnd}% ${carbsEnd}%, ${MACRO_COLORS.fats} ${carbsEnd}% 100%)`;
+  }
+
+  if (noteEl) {
+    const fatMode = fatsG < fatTargetG ? 'calorie-limited floor mode' : 'standard fat target mode';
+    noteEl.textContent = `Rules: protein = 1.6g/kg (${proteinG}g), fat target = 0.8g/kg (${fatTargetG}g), fat floor = 0.6g/kg (${fatFloorG}g). Current: ${fatMode}; carbs fill remaining calories.`;
+  }
+}
+
+function cycleMacroView() {
+  macroViewIndex = (macroViewIndex + 1) % MACRO_VIEW_MODES.length;
+  renderProfileCard();
 }
 
 function openEditProfileModal() {
@@ -168,4 +271,16 @@ export function setupProfileListeners() {
   el('edit-profile-btn')?.addEventListener('click', openEditProfileModal);
   el('save-edit-profile')?.addEventListener('click', handleSaveProfile);
   el('cancel-edit-profile')?.addEventListener('click', closeEditProfileModal);
+
+  const macroCard = el('macro-breakdown-card');
+  if (macroCard && !macroCard.dataset.bound) {
+    macroCard.addEventListener('click', cycleMacroView);
+    macroCard.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        cycleMacroView();
+      }
+    });
+    macroCard.dataset.bound = 'true';
+  }
 }
