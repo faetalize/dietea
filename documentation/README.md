@@ -67,8 +67,8 @@ Two consequences worth knowing:
 | Profile, start day, shopping checkmarks | `localStorage` key `mealPrepState` | `saveState()` |
 | Today's supplement and water tracking | `localStorage` key `mealPrepSupplementsState` | `js/components/supplements.js` |
 
-Settings → *Delete all data* clears `mealPrepState` and `mealPrepSchedule`, drops the
-file handles, and reloads the bundled JSON. It does not clear the supplements key.
+Settings → *Delete all data* clears all three keys, drops the file handles, and reloads
+the bundled JSON.
 
 ## Data formats
 
@@ -115,11 +115,13 @@ in [MODULE_GUIDE.md](MODULE_GUIDE.md).
 npm run dev
 ```
 
-Serves the repo root on port 3000 with live reload. The script tries to exclude
-`ingredients.json` and `menu.json` from the reload watcher, so that the app writing to
-them does not reload the page out from under you.
+Serves the repo root on port 3000 with live reload. `ingredients.json` and `menu.json`
+are excluded from the reload watcher, so the app writing to them does not reload the page
+out from under you.
 
-Note that the exclusion does not currently take effect on Windows: `npm` runs scripts
-through `cmd.exe`, which does not strip the single quotes around `--ignorePattern`, so
-live-server receives the quotes as part of the regex and the pattern never matches. Until
-that is fixed, expect a reload after each save on Windows.
+The `--ignorePattern` regex is double-quoted deliberately. Single quotes break the script
+on Windows: `npm` runs scripts through `cmd.exe`, which does not treat `'` as a quote, so
+the `|` characters in the regex are parsed as pipes and the server fails to start
+outright. Double quotes are stripped by both `cmd.exe` and POSIX shells, and the `$`
+sequences in the pattern are not valid parameter expansions, so it survives intact on
+both.

@@ -206,6 +206,7 @@ function setupEventListeners() {
       renderScheduleOverview();
       renderShoppingList();
     },
+    onSupplementsChanged: renderSupplements,
     onShowOnboarding: showOnboarding
   });
   setupProfileListeners();

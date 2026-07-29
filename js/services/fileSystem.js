@@ -116,31 +116,8 @@ async function verifyPermission(fileHandle, withWrite = false) {
   return false;
 }
 
-/*
- * The four stubs below (restoreFileHandle, openDB, hasStoredFileHandle,
- * requestPermissionAndLoad) plus getFileHandle are vestigial: they remain from an
- * earlier design that persisted handles in IndexedDB. Nothing calls them. Handles
- * now live only in the module-level variables above, so a reload drops them and the
- * user reconnects each session. Persisting handles again means reintroducing
- * IndexedDB — these stubs are not a working foundation for it.
- */
-
 /**
- * Unused. Always null — handles are not persisted across sessions.
- */
-export async function restoreFileHandle() {
-  return null;
-}
-
-/**
- * Unused. Always null — no IndexedDB in the current design.
- */
-function openDB() {
-  return null;
-}
-
-/**
- * Clear stored file handle
+ * Clear both file handles
  */
 export async function clearFileHandle() {
   ingredientsFileHandle = null;
@@ -159,30 +136,14 @@ export async function clearMealsFileHandle() {
 }
 
 /**
- * Unused alias for getIngredientsFileHandle().
+ * Current file handles, or null when not connected.
+ * Handles live only in this module, so a reload drops them and the user
+ * reconnects each session.
  */
-export function getFileHandle() {
-  return ingredientsFileHandle;
-}
-
 export function getIngredientsFileHandle() {
   return ingredientsFileHandle;
 }
 
 export function getMealsFileHandle() {
   return mealsFileHandle;
-}
-
-/**
- * Unused. Always false — no handles are stored between sessions.
- */
-export async function hasStoredFileHandle() {
-  return false;
-}
-
-/**
- * Unused. Always null — there is no stored handle to reload from.
- */
-export async function requestPermissionAndLoad() {
-  return null;
 }

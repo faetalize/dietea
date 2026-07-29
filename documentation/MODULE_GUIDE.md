@@ -188,10 +188,10 @@ is connected. `clearFileHandle()` clears both; the two specific clears drop one 
 Writes request `readwrite` permission on every save and resolve to `false` rather than
 throwing if it is denied.
 
-> `restoreFileHandle`, `hasStoredFileHandle`, `requestPermissionAndLoad`, and
-> `getFileHandle` are vestigial stubs from an earlier IndexedDB-backed design. They are
-> exported but unused, and the first three always return `null`/`false`. Do not build on
-> them — persisting handles means reintroducing IndexedDB.
+Handles are deliberately not persisted. An earlier design kept them in IndexedDB; the
+stubs left over from it were removed, so reconnecting once per session is the intended
+behavior rather than a gap waiting to be filled. Restoring persistence means bringing
+IndexedDB back.
 
 ### `js/services/storage.js`
 
@@ -380,12 +380,15 @@ Remember that the numeric fields are **per unit**, not per 100 g.
 ### `js/components/supplements.js`
 
 ```javascript
-import { renderSupplements, setupSupplementsListeners } from './supplements.js';
+import { renderSupplements, setupSupplementsListeners, clearSupplementsData } from './supplements.js';
+
+clearSupplementsData();   // drops the stored tracking; silent, caller re-renders
 ```
 
 A fixed list of 13 supplements plus water tracking, persisted to
 `localStorage` under `mealPrepSupplementsState` and reset automatically when the date
-changes. Goals scale off `state.profile.weight` — 35 ml/kg water, 1.6 g/kg protein —
+changes. The storage key is private to this module — reach it through
+`clearSupplementsData()` rather than naming the key elsewhere. Goals scale off `state.profile.weight` — 35 ml/kg water, 1.6 g/kg protein —
 defaulting to 75 kg when no profile is set. The list itself is a hardcoded `SUPPLEMENTS`
 constant in the module, not user data.
 
@@ -407,19 +410,20 @@ Saving the edit modal clears the derived calorie fields, recomputes them with
 ```javascript
 import { setupSettingsListeners } from './settings.js';
 
-setupSettingsListeners({ onScheduleChanged, onIngredientsChanged, onMealsChanged, onShowOnboarding });
+setupSettingsListeners({ onScheduleChanged, onIngredientsChanged, onMealsChanged, onSupplementsChanged, onShowOnboarding });
 ```
 
 Wires the start-day selector, the file connect/disconnect controls, and the destructive
-actions. Every callback is optional; `main.js` supplies all four so that a change in
+actions. Every callback is optional; `main.js` supplies all five so that a change in
 Settings re-renders whatever it affects.
 
 Destructive buttons use a two-step confirm driven by a `.confirming` class on a
 `.setting-action-wrapper` — see `setupDestructiveAction`.
 
 Disconnecting a file reverts that dataset to the bundled JSON rather than leaving it
-empty. *Delete all data* clears `localStorage`, drops both handles, restores the bundled
-data, and reopens onboarding.
+empty. *Delete all data* clears all three `localStorage` keys — state, schedule, and
+supplement tracking — drops both handles, restores the bundled data, and reopens
+onboarding.
 
 ## Adding a module
 

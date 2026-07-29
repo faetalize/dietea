@@ -20,6 +20,7 @@ import { loadIngredients, loadMeals } from '../core/dataLoader.js';
 import { hydrateMeal } from '../core/mealSerde.js';
 import { state, updateState, saveState, resetState } from '../services/state.js';
 import { saveIngredients, saveMeals, saveSchedule } from '../services/storage.js';
+import { clearSupplementsData } from './supplements.js';
 import { showToast } from '../utils/feedback.js';
 
 function setupDestructiveAction(button, onConfirm) {
@@ -49,6 +50,7 @@ export function setupSettingsListeners({
   onScheduleChanged,
   onIngredientsChanged,
   onMealsChanged,
+  onSupplementsChanged,
   onShowOnboarding
 } = {}) {
   const settingsStartDay = document.getElementById('settings-start-day');
@@ -237,6 +239,7 @@ export function setupSettingsListeners({
   setupDestructiveAction(deleteAllBtn, async () => {
     localStorage.removeItem('mealPrepState');
     localStorage.removeItem('mealPrepSchedule');
+    clearSupplementsData();
 
     await clearFileHandle();
 
@@ -249,6 +252,8 @@ export function setupSettingsListeners({
     await saveIngredients();
     await saveMeals();
     saveSchedule();
+
+    onSupplementsChanged?.();
 
     showToast('All data deleted', 'success');
 

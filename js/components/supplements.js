@@ -82,6 +82,15 @@ function saveTrackerState(nextState) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(nextState));
 }
 
+/**
+ * Drop all persisted supplement tracking.
+ * Used by Settings → Delete all data. The caller re-renders; this stays silent
+ * so it can be folded into a larger reset without stacking toasts.
+ */
+export function clearSupplementsData() {
+  localStorage.removeItem(STORAGE_KEY);
+}
+
 function getProteinDosageText() {
   const { proteinGoalG } = getGoals();
   return `${proteinGoalG} g total`;
