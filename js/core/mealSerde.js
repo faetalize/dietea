@@ -1,6 +1,6 @@
 /**
  * Meal (de)serialization helpers
- * Keeps localStorage JSON stable while restoring class instances.
+ * Keeps the stored JSON shape stable while restoring class instances.
  */
 
 import { dataStore } from './dataStore.js';

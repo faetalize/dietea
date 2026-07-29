@@ -1,3 +1,4 @@
 /specs.md
 *:Zone.Identifier
 *.crswap
+node_modules/

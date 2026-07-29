@@ -142,7 +142,6 @@ async function handleMealsImport(event) {
     const saved = await saveMeals();
     if (!saved) {
       setMeals(previousMeals);
-      showToast('Connect menu.json in Settings before importing meals', 'error');
       return;
     }
 

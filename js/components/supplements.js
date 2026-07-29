@@ -4,9 +4,9 @@
  */
 
 import { state } from '../services/state.js';
+import { supabase, describeError } from '../services/supabase.js';
+import { requireUserId } from '../services/auth.js';
 import { showToast } from '../utils/feedback.js';
-
-const STORAGE_KEY = 'mealPrepSupplementsState';
 
 const SUPPLEMENTS = [
   { id: 'd3', name: 'Vitamin D3', timing: 'Morning (with fat)', dosage: '2,000 - 5,000 IU', note: 'Bone health, mood, immunity.' },
@@ -54,41 +54,91 @@ function getDefaultTrackerState() {
   };
 }
 
+/**
+ * Today's tracker, held in memory so render stays synchronous.
+ * Populated by loadSupplementsState() during startup.
+ */
+let trackerState = getDefaultTrackerState();
+
 function loadTrackerState() {
-  const fallback = getDefaultTrackerState();
-
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return fallback;
-
-    const parsed = JSON.parse(raw);
-    const merged = {
-      ...fallback,
-      ...(parsed || {}),
-      completed: typeof parsed?.completed === 'object' && parsed.completed !== null ? parsed.completed : {}
-    };
-
-    if (merged.day !== todayKey()) {
-      return { ...merged, day: todayKey(), completed: {}, waterConsumed: 0 };
-    }
-
-    return merged;
-  } catch {
-    return fallback;
-  }
+  return trackerState;
 }
 
-function saveTrackerState(nextState) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(nextState));
+function rowToTracker(row) {
+  const fallback = getDefaultTrackerState();
+  if (!row) return fallback;
+
+  return {
+    day: row.day || fallback.day,
+    completed: row.completed && typeof row.completed === 'object' ? row.completed : {},
+    waterConsumed: Number(row.water_consumed) || 0,
+    bottleSize: Number(row.bottle_size) || fallback.bottleSize
+  };
 }
 
 /**
- * Drop all persisted supplement tracking.
+ * Fetch today's row. A new day simply has no row yet, which is why the table is
+ * keyed by (user_id, day) — yesterday's tracking is kept rather than reset over.
+ * Carries yesterday's bottle size forward so the preference is not lost.
+ */
+export async function loadSupplementsState() {
+  const today = todayKey();
+
+  const { data, error } = await supabase
+    .from('supplement_days')
+    .select('day, completed, water_consumed, bottle_size')
+    .order('day', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    console.error('Could not load supplement tracking', error);
+    trackerState = getDefaultTrackerState();
+    return trackerState;
+  }
+
+  const latest = rowToTracker(data);
+
+  trackerState = latest.day === today
+    ? latest
+    : { ...getDefaultTrackerState(), bottleSize: latest.bottleSize };
+
+  return trackerState;
+}
+
+async function saveTrackerState(nextState) {
+  trackerState = nextState;
+
+  try {
+    const userId = requireUserId();
+    const { error } = await supabase.from('supplement_days').upsert({
+      user_id: userId,
+      day: nextState.day,
+      completed: nextState.completed,
+      water_consumed: nextState.waterConsumed,
+      bottle_size: nextState.bottleSize
+    }, { onConflict: 'user_id,day' });
+
+    if (error) throw error;
+    return true;
+  } catch (err) {
+    console.error('Could not save supplement tracking', err);
+    showToast(describeError(err), 'error');
+    return false;
+  }
+}
+
+/**
+ * Drop all persisted supplement tracking for the signed-in user.
  * Used by Settings → Delete all data. The caller re-renders; this stays silent
  * so it can be folded into a larger reset without stacking toasts.
  */
-export function clearSupplementsData() {
-  localStorage.removeItem(STORAGE_KEY);
+export async function clearSupplementsData() {
+  trackerState = getDefaultTrackerState();
+
+  const userId = requireUserId();
+  const { error } = await supabase.from('supplement_days').delete().eq('user_id', userId);
+  if (error) throw error;
 }
 
 function getProteinDosageText() {
@@ -199,7 +249,6 @@ export function setupSupplementsListeners() {
     const actionButton = event.target.closest('[data-action]');
     if (!actionButton) return;
 
-    const trackerState = loadTrackerState();
     const { waterGoalMl } = getGoals();
     const action = actionButton.dataset.action;
 
@@ -238,8 +287,6 @@ export function setupSupplementsListeners() {
       resetDay();
       return;
     }
-
-    saveTrackerState(trackerState);
   });
 
   supplementsTab.addEventListener('change', (event) => {

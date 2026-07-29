@@ -1,12 +1,12 @@
 # Dietea — Meal Prep Planner
 
-A single-page, dependency-free vanilla-JS webapp for planning a week of meals: keep a
-menu of recipes, schedule them across the week against a calorie and macro target, and
-generate the shopping list that falls out of that schedule.
+A single-page vanilla-JS webapp for planning a week of meals: keep a menu of recipes,
+schedule them across the week against a calorie and macro target, and generate the
+shopping list that falls out of that schedule.
 
-Ingredients and meals live in `ingredients.json` and `menu.json`. In Chrome and Edge the
-app edits those files in place through the File System Access API, so the repo itself is
-the database.
+Data lives in Supabase, scoped per user, so your plan and profile follow you to any
+device. The frontend is static — no build step, no server — and deploys as-is to
+Cloudflare Pages or any static host.
 
 ## Run it
 
@@ -17,12 +17,22 @@ npm run dev
 Then open <http://localhost:3000>.
 
 The app has to be served over HTTP. Opening `index.html` straight from disk (`file://`)
-does not work: `main.js` is loaded as an ES module and the data files are read with
-`fetch()`, and browsers block both on a `file://` origin.
+does not work: `main.js` is loaded as an ES module, which browsers block on a `file://`
+origin.
+
+## Setup
+
+The Supabase project is already configured in [js/config.js](js/config.js), and the
+schema is applied. One project setting is required before the app can read anything:
+
+> **Supabase dashboard → Project Settings → API → Exposed schemas → add `dietea`.**
+
+Without it every request fails with `PGRST106`, and the app will say so. See
+[documentation/README.md](documentation/README.md) for the details.
 
 ## Docs
 
 - [Overview and getting started](documentation/README.md)
 - [Project structure](documentation/PROJECT_STRUCTURE.md)
 - [Module reference](documentation/MODULE_GUIDE.md)
-- [Refactor history](documentation/REFACTORING.md)
+- [Architecture history](documentation/REFACTORING.md)

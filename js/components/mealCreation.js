@@ -286,7 +286,6 @@ async function handleMealSave(onAfterSave) {
     const saved = await saveMeals();
     if (!saved) {
       setMeals(previousMeals);
-      showToast('Connect menu.json in Settings before saving meals', 'error');
       return;
     }
 
@@ -310,7 +309,6 @@ async function handleMealSave(onAfterSave) {
   const saved = await saveMeals();
   if (!saved) {
     setMeals(previousMeals);
-    showToast('Connect menu.json in Settings before creating meals', 'error');
     return;
   }
 
@@ -326,7 +324,6 @@ export async function deleteMeal(mealId, onAfterDelete) {
   const saved = await saveMeals();
   if (!saved) {
     setMeals(previousMeals);
-    showToast('Connect menu.json in Settings before deleting meals', 'error');
     return;
   }
 

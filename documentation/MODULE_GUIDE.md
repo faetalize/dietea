@@ -81,19 +81,30 @@ whose meal is not a `Meal` instance are skipped, so pass hydrated meals.
 
 ### `js/core/dataLoader.js`
 
-Reads the bundled JSON over HTTP. Called once from `main.js` on startup, and again by
-Settings when a connected file is disconnected and the app reverts to the bundled copy.
+Reads each collection from Supabase, and seeds a brand new account.
 
 ```javascript
-import { loadIngredients, loadMeals } from '../core/dataLoader.js';
+import { loadIngredients, loadMeals, loadSchedule, isAccountEmpty, seedStarterData } from '../core/dataLoader.js';
 
-const items = await loadIngredients();   // FoodItem[]; throws if the fetch fails
-const raw   = await loadMeals();         // plain objects, NOT Meal instances; [] on failure
+const items = await loadIngredients();   // FoodItem[]
+const raw   = await loadMeals();         // plain objects, NOT Meal instances
+const days  = await loadSchedule();      // [] when the user has no schedule row
+
+if (await isAccountEmpty()) await seedStarterData();
 ```
 
-`loadMeals()` deliberately returns raw JSON — pass it through `hydrateMeal` to get usable
-`Meal` objects. Note the asymmetry: `loadIngredients` throws on failure, `loadMeals`
-returns `[]`.
+All of these throw on failure with a translated message, so one try/catch at the call
+site covers them.
+
+`loadMeals()` deliberately returns raw rows — pass them through `hydrateMeal` to get
+usable `Meal` objects. The ingredient column list matches the `FoodItem` constructor
+exactly, so rows need no mapping.
+
+`seedStarterData()` reads the bundled `ingredients.json` and `menu.json` and upserts them
+for the current user. `isAccountEmpty()` guards it: seeding only happens when the account
+has neither ingredients nor meals, so it can never overwrite real data. That also means a
+user who deliberately deletes everything gets the starter set back, which is what the old
+"delete all data" did.
 
 ### `js/core/mealSerde.js`
 
@@ -113,19 +124,66 @@ meals to avoid this.
 
 ## Services
 
+### `js/services/supabase.js`
+
+Builds the client and translates errors.
+
+```javascript
+import { supabase, describeError, assertOk } from '../services/supabase.js';
+
+const { data, error } = await supabase.from('meals').select('*');
+assertOk(error, 'Could not load meals');   // throws with a readable message
+showToast(describeError(error), 'error');  // or handle it yourself
+```
+
+The client is configured with `db: { schema: 'dietea' }`, so `.from('meals')` resolves to
+`dietea.meals` — never write the schema into a table name.
+
+`describeError` special-cases the failures that are not the user's fault, most importantly
+`PGRST106`, which means the `dietea` schema is not in the project's exposed schemas.
+Without that translation the app would report a bare "not found" for a project
+misconfiguration.
+
+`supabase-js` is imported from `js/vendor/supabase.js`, a committed esbuild bundle, so
+there is no CDN dependency. Regenerate it with `npm run vendor:supabase`.
+
+### `js/services/auth.js`
+
+Email and password auth. Owns the current user.
+
+```javascript
+import { initAuth, onAuthChange, signIn, signUp, signOut, getCurrentUser, getCurrentUserId, requireUserId } from '../services/auth.js';
+
+const user = await initAuth();            // read persisted session; null when signed out
+const unsubscribe = onAuthChange((u) => { if (!u) showAuthScreen(); });
+
+const { user, error } = await signIn(email, password);
+const { user, needsConfirmation, error } = await signUp(email, password);
+```
+
+`signUp` returns `needsConfirmation: true` when the project requires email verification —
+Supabase returns a user but no session, and the caller has to say "check your inbox"
+rather than assume a successful sign-in.
+
+`requireUserId()` throws when signed out and is called by every write path, so an expired
+session surfaces as one clear message instead of an opaque RLS rejection. `getCurrentUser`
+and `getCurrentUserId` are the non-throwing reads.
+
 ### `js/services/state.js`
 
 ```javascript
-import { state, loadState, saveState, updateState, updateProfile, resetState } from '../services/state.js';
+import { state, loadState, saveState, flushState, updateState, updateProfile, resetState } from '../services/state.js';
 
 state.onboarded;        // boolean
 state.startDay;         // 0-6, Sunday-indexed; which weekday the plan starts on
 state.checkedItems;     // { [shoppingRowId]: boolean }
 state.profile;          // see below
 
-updateState({ startDay: 2 });               // merges, then saves
-updateProfile({ weight: 75, height: 180 }); // merges into state.profile, then saves
-resetState();                               // back to defaults, then saves
+await loadState();                          // fetch the user's row, creating it on first run
+updateState({ startDay: 2 });               // merges, then queues a save
+updateProfile({ weight: 75, height: 180 }); // merges into state.profile, then queues a save
+await flushState();                         // write any queued change now and wait
+await resetState();                         // back to defaults, written immediately
 ```
 
 `state.profile` is `{ age, sex, weight, height, activityLevel, goalWeight, goalMonths,
@@ -133,8 +191,16 @@ maintenanceCalories, recommendedCalories }`. Weight is kg, height is cm,
 `activityLevel` is the TDEE multiplier (1.2–1.9), and the two calorie fields are derived
 — `calculateProfileMetrics` recomputes them whenever the profile is edited.
 
-`updateState` and `updateProfile` both persist, so an explicit `saveState()` is only
-needed after mutating `state` in place (as the shopping list does with `checkedItems`).
+Backed by `dietea.profiles`, one row per user. The module maps between the app's camelCase
+shape and the table's snake_case columns; `weight` is `weight_kg`, `goalWeight` is
+`goal_weight_kg`, and so on.
+
+`state` stays synchronously readable so components are unchanged, but writes are **queued
+on a 400 ms debounce**. That matters for the shopping list, where every checkbox toggle
+calls `saveState()` — without debouncing, a shopping trip would be one request per tap.
+
+Use `flushState()` when a write has to land before moving on. Onboarding does this: a
+reload before that write completes would drop the user straight back into onboarding.
 
 Because `state` is a rebindable `let`, `loadState()` and `resetState()` replace the whole
 object. Read through the live binding rather than destructuring it once at module load.
@@ -167,60 +233,45 @@ check.recommendedMonths;   // a timeframe that would be realistic
 recommendedCalories }`, or `null` if any required profile field is missing — always
 null-check it.
 
-### `js/services/fileSystem.js`
-
-Wraps the File System Access API and owns both file handles. The handles are plain
-module-level variables, so they are lost on reload.
-
-```javascript
-import { isFileSystemSupported, selectIngredientsFile, selectMealsFile, loadIngredientsFromFile, loadMealsFromFile, saveIngredientsToFile, saveMealsToFile, getIngredientsFileHandle, getMealsFileHandle, clearIngredientsFileHandle, clearMealsFileHandle, clearFileHandle } from '../services/fileSystem.js';
-
-if (!isFileSystemSupported()) { /* Firefox, Safari — read-only mode */ }
-
-const handle = await selectIngredientsFile();   // opens the picker; null if cancelled
-const data   = await loadIngredientsFromFile(handle);
-const ok     = await saveIngredientsToFile(items);   // false if no handle or permission denied
-```
-
-Getters return the handle or `null`, which is how the rest of the app tests whether a file
-is connected. `clearFileHandle()` clears both; the two specific clears drop one each.
-
-Writes request `readwrite` permission on every save and resolve to `false` rather than
-throwing if it is denied.
-
-Handles are deliberately not persisted. An earlier design kept them in IndexedDB; the
-stubs left over from it were removed, so reconnecting once per session is the intended
-behavior rather than a gap waiting to be filled. Restoring persistence means bringing
-IndexedDB back.
-
 ### `js/services/storage.js`
 
-Routes each dataset to its destination.
+Persists each collection to Supabase.
 
 ```javascript
 import { saveIngredients, saveMeals, saveSchedule } from '../services/storage.js';
 
-const ok = await saveIngredients();   // → ingredients.json
-const ok = await saveMeals();         // → menu.json, via serializeMeal
-saveSchedule();                       // → localStorage 'mealPrepSchedule'
+const ok = await saveIngredients();   // → dietea.ingredients
+const ok = await saveMeals();         // → dietea.meals, via serializeMeal
+const ok = await saveSchedule();      // → dietea.schedules
 ```
 
-`saveIngredients` and `saveMeals` are async and return a boolean. They return `false`
-immediately — writing nothing — when the API is unsupported or the file is not connected.
-**Always check the result**; the established pattern is to snapshot, mutate optimistically,
-and restore on failure:
+All three are async and return a boolean, and they **toast the reason themselves** on
+failure — callers only have to roll back. **Always check the result**; the established
+pattern is to snapshot, mutate optimistically, and restore on failure:
 
 ```javascript
 const previous = [...dataStore.ingredients];
 setIngredients(next);
 if (!await saveIngredients()) {
   setIngredients(previous);
-  showToast('Connect ingredients.json in Settings before saving changes', 'error');
   return;
 }
 ```
 
-`saveSchedule` is synchronous and always succeeds — it only touches `localStorage`.
+`saveIngredients` and `saveMeals` keep their original whole-collection contract: hand over
+the full array, and the module works out the difference. Each sync upserts every current
+row and then deletes the rows that are gone.
+
+Two consequences of that design:
+
+- It is **several round trips**, not one. Fine at this scale — tens of rows — but worth
+  revisiting as a single RPC if the data grows.
+- It is **not atomic**. A failure between the upsert and the delete can leave a removed
+  row behind. The in-memory rollback will not undo a partial write.
+
+`saveSchedule` is a plain upsert of one row, since the whole plan is a single JSONB
+column. It used to be synchronous; it is now async, so callers that care about failure
+should await it.
 
 ## Utils
 
@@ -380,15 +431,21 @@ Remember that the numeric fields are **per unit**, not per 100 g.
 ### `js/components/supplements.js`
 
 ```javascript
-import { renderSupplements, setupSupplementsListeners, clearSupplementsData } from './supplements.js';
+import { renderSupplements, setupSupplementsListeners, loadSupplementsState, clearSupplementsData } from './supplements.js';
 
-clearSupplementsData();   // drops the stored tracking; silent, caller re-renders
+await loadSupplementsState();   // called once during bootstrap
+await clearSupplementsData();   // deletes every day's row; silent, caller re-renders
 ```
 
-A fixed list of 13 supplements plus water tracking, persisted to
-`localStorage` under `mealPrepSupplementsState` and reset automatically when the date
-changes. The storage key is private to this module — reach it through
-`clearSupplementsData()` rather than naming the key elsewhere. Goals scale off `state.profile.weight` — 35 ml/kg water, 1.6 g/kg protein —
+A fixed list of 13 supplements plus water tracking, backed by `dietea.supplement_days`.
+
+The table is keyed `(user_id, day)`, so the tracker **keeps history** rather than
+overwriting yesterday. `loadSupplementsState()` reads the most recent row; if it is not
+today's, the module starts a fresh day and carries the bottle-size preference forward.
+
+Today's tracker is held in a module-level variable so `renderSupplements()` stays
+synchronous. Mutations update that variable immediately and persist in the background, so
+the UI never waits on the network. Goals scale off `state.profile.weight` — 35 ml/kg water, 1.6 g/kg protein —
 defaulting to 75 kg when no profile is set. The list itself is a hardcoded `SUPPLEMENTS`
 constant in the module, not user data.
 
@@ -410,20 +467,19 @@ Saving the edit modal clears the derived calorie fields, recomputes them with
 ```javascript
 import { setupSettingsListeners } from './settings.js';
 
-setupSettingsListeners({ onScheduleChanged, onIngredientsChanged, onMealsChanged, onSupplementsChanged, onShowOnboarding });
+setupSettingsListeners({ onScheduleChanged, onIngredientsChanged, onMealsChanged, onSupplementsChanged, onShowOnboarding, onSignedOut });
 ```
 
-Wires the start-day selector, the file connect/disconnect controls, and the destructive
-actions. Every callback is optional; `main.js` supplies all five so that a change in
+Wires the profile card, the start-day selector, the account section, and the destructive
+actions. Every callback is optional; `main.js` supplies all six so that a change in
 Settings re-renders whatever it affects.
 
 Destructive buttons use a two-step confirm driven by a `.confirming` class on a
 `.setting-action-wrapper` — see `setupDestructiveAction`.
 
-Disconnecting a file reverts that dataset to the bundled JSON rather than leaving it
-empty. *Delete all data* clears all three `localStorage` keys — state, schedule, and
-supplement tracking — drops both handles, restores the bundled data, and reopens
-onboarding.
+*Delete all data* removes every row the user owns across all five tables, resets the
+profile, then re-seeds the starter ingredients and menu so the account lands in the same
+state as a fresh sign-up, and reopens onboarding.
 
 ## Adding a module
 
@@ -435,4 +491,9 @@ onboarding.
 4. If it renders, add its markup to `index.html`, expose a `render*` and a
    `setup*Listeners`, and call them from `main.js`.
 5. If it mutates ingredients or meals, follow the snapshot-and-roll-back save pattern.
-6. Verify in the browser — there is no test suite.
+6. If it writes to Supabase, call `requireUserId()` first and set `user_id` on every row —
+   RLS will reject the write otherwise.
+7. If it needs a new table, add a migration under `supabase/migrations/`, put it in the
+   `dietea` schema, enable RLS, and add a `auth.uid() = user_id` policy. A table without
+   a policy is invisible rather than public, which is a confusing way to find the mistake.
+8. Verify in the browser — there is no test suite.

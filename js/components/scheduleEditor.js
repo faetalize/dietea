@@ -549,11 +549,18 @@ function clearScheduleEditor() {
   showToast('Schedule cleared', 'default');
 }
 
-function saveEditedSchedule() {
+async function saveEditedSchedule() {
   const hasAnyMeal = tempSchedule.some((day) => day.isCheatDay || day.slots.some((slot) => slot.mealId));
 
+  // Same optimistic pattern as the other writes: swap in, persist, restore on
+  // failure. saveSchedule() toasts the reason, so this only has to roll back.
+  const previousSchedule = dataStore.schedule;
   setSchedule(hasAnyMeal ? tempSchedule : []);
-  saveSchedule();
+
+  if (!await saveSchedule()) {
+    setSchedule(previousSchedule);
+    return;
+  }
 
   renderSchedule();
   renderScheduleOverview();

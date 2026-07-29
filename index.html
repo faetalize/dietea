@@ -11,8 +11,36 @@
     <link rel="stylesheet" href="main.css">
 </head>
 <body>
+    <!-- Auth Screen. Visible by default so a signed-out visitor never sees a
+         blank page while the session is being read. -->
+    <div id="auth-screen" class="auth-screen">
+        <div class="auth-card">
+            <span class="material-symbols-rounded modal-icon">skillet</span>
+            <h1 id="auth-title">Sign in</h1>
+            <p class="auth-subtitle">Your plan, profile, and shopping list follow you to every device.</p>
+
+            <form id="auth-form" class="auth-form" novalidate>
+                <label class="form-field">
+                    <span>Email</span>
+                    <input type="email" id="auth-email" autocomplete="email" placeholder="you@example.com">
+                </label>
+                <label class="form-field">
+                    <span>Password</span>
+                    <input type="password" id="auth-password" autocomplete="current-password" placeholder="At least 6 characters">
+                </label>
+
+                <p id="auth-error" class="auth-error hidden"></p>
+                <p id="auth-status" class="auth-status hidden"></p>
+
+                <button type="submit" id="auth-submit" class="btn btn-primary btn-block">Sign in</button>
+            </form>
+
+            <button type="button" id="auth-toggle-mode" class="btn-link">No account? Create one</button>
+        </div>
+    </div>
+
     <!-- Onboarding Modal -->
-    <div id="onboarding-modal" class="modal">
+    <div id="onboarding-modal" class="modal hidden">
         <div class="modal-content onboarding-content">
             <span class="material-symbols-rounded modal-icon">skillet</span>
             <h2>Welcome to Meal Prep</h2>
@@ -404,56 +432,16 @@
                 </div>
 
                 <div class="settings-section">
-                    <h2>File System</h2>
+                    <h2>Account</h2>
                     <div class="settings-content">
                         <div class="setting-item">
                             <div class="setting-info">
-                                <span class="setting-label">Quick Setup</span>
-                                <span class="setting-description">Connect ingredients.json and menu.json in one guided flow</span>
+                                <span class="setting-label">Signed in as</span>
+                                <span class="setting-description" id="account-email">--</span>
                             </div>
-                            <button id="connect-both-files" class="btn btn-primary">
-                                <span class="material-symbols-rounded">link</span>
-                                Connect Both Files
-                            </button>
-                        </div>
-                        <div class="setting-item">
-                            <div class="setting-info">
-                                <span class="setting-label">Ingredients Database</span>
-                                <span class="setting-description" id="ingredients-file-status">Connect to ingredients.json file for automatic sync</span>
-                            </div>
-                            <button id="connect-ingredients-file" class="btn btn-primary">
-                                <span class="material-symbols-rounded">attach_file</span>
-                                Select File
-                            </button>
-                        </div>
-                        <div class="setting-item" id="disconnect-ingredients-item" style="display: none;">
-                            <div class="setting-info">
-                                <span class="setting-label">Disconnect Ingredients File</span>
-                                <span class="setting-description">Stop syncing with ingredients.json</span>
-                            </div>
-                            <button id="disconnect-ingredients-file" class="btn btn-secondary">
-                                <span class="material-symbols-rounded">link_off</span>
-                                Disconnect
-                            </button>
-                        </div>
-                        <div class="setting-item">
-                            <div class="setting-info">
-                                <span class="setting-label">Menu Database</span>
-                                <span class="setting-description" id="meals-file-status">Connect to menu.json file for automatic sync</span>
-                            </div>
-                            <button id="connect-meals-file" class="btn btn-primary">
-                                <span class="material-symbols-rounded">attach_file</span>
-                                Select File
-                            </button>
-                        </div>
-                        <div class="setting-item" id="disconnect-meals-item" style="display: none;">
-                            <div class="setting-info">
-                                <span class="setting-label">Disconnect Menu File</span>
-                                <span class="setting-description">Stop syncing with menu.json</span>
-                            </div>
-                            <button id="disconnect-meals-file" class="btn btn-secondary">
-                                <span class="material-symbols-rounded">link_off</span>
-                                Disconnect
+                            <button id="sign-out-btn" class="btn btn-secondary">
+                                <span class="material-symbols-rounded">logout</span>
+                                Sign Out
                             </button>
                         </div>
                     </div>

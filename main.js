@@ -1,25 +1,21 @@
 /**
  * Meal Prep Planner - Main Entry Point
  *
- * Bootstraps data, chooses onboarding vs. app, and wires every component's
- * listeners exactly once. Rendering lives in js/components/.
+ * Gates the app behind Supabase auth, loads the signed-in user's data, and
+ * wires every component's listeners exactly once. Rendering lives in
+ * js/components/.
  */
 
 // Core data and models
-import { dataStore, setIngredients, setMeals, setSchedule, aggregateShoppingList, getMealById } from './js/core/dataStore.js';
-import { Meal, FoodItem } from './js/core/models.js';
-import { loadIngredients, loadMeals } from './js/core/dataLoader.js';
+import { dataStore, setIngredients, setMeals, setSchedule, getMealById } from './js/core/dataStore.js';
+import { loadIngredients, loadMeals, loadSchedule, seedStarterData, isAccountEmpty } from './js/core/dataLoader.js';
 import { hydrateMeal } from './js/core/mealSerde.js';
-import { 
-  isFileSystemSupported, 
-  getIngredientsFileHandle,
-  getMealsFileHandle,
-} from './js/services/fileSystem.js';
 
 // Services
-import { state, loadState, saveState, updateProfile, updateState } from './js/services/state.js';
+import { state, loadState, updateProfile, updateState, flushState } from './js/services/state.js';
 import { calculateProfileMetrics } from './js/services/calories.js';
-import { saveIngredients, saveMeals, saveSchedule } from './js/services/storage.js';
+import { initAuth, onAuthChange, signIn, signUp, getCurrentUser } from './js/services/auth.js';
+import { describeError } from './js/services/supabase.js';
 
 // Utils
 import { showToast, showFieldError, clearValidationErrors } from './js/utils/feedback.js';
@@ -32,65 +28,192 @@ import { renderScheduleOverview, setupScheduleListeners } from './js/components/
 import { renderMenuCards, filterMenuCards, setupMenuListeners } from './js/components/menu.js';
 import { setupMealCreationListeners } from './js/components/mealCreation.js';
 import { renderIngredients, filterIngredients, setupIngredientsListeners } from './js/components/ingredients.js';
-import { renderSupplements, setupSupplementsListeners } from './js/components/supplements.js';
+import { renderSupplements, setupSupplementsListeners, loadSupplementsState } from './js/components/supplements.js';
 import { setupSettingsListeners } from './js/components/settings.js';
 import { renderProfileCard, setupProfileListeners } from './js/components/profile.js';
+
+/** App listeners are wired once per page load, not once per sign-in. */
+let appListenersReady = false;
 
 /**
  * Initialize the application
  */
 async function init() {
-  await bootstrapData();
-  loadState();
+  setupAuthScreenListeners();
+
+  const user = await initAuth();
+
+  if (user) {
+    await startSession();
+  } else {
+    showAuthScreen();
+  }
+
+  // Covers token expiry and sign-out from another tab.
+  onAuthChange((nextUser) => {
+    if (!nextUser) showAuthScreen();
+  });
+}
+
+/**
+ * Load everything for the signed-in user and hand off to the app.
+ */
+async function startSession() {
+  setAuthBusy(true, 'Loading your data…');
+
+  try {
+    await bootstrapData();
+    await loadState();
+  } catch (err) {
+    console.error('Could not start session', err);
+    showAuthError(describeError(err) || err.message);
+    setAuthBusy(false);
+    return;
+  }
+
+  hideAuthScreen();
+  setAuthBusy(false);
+
+  if (!appListenersReady) {
+    setupEventListeners();
+    appListenersReady = true;
+  }
 
   if (state.onboarded) {
     showApp();
   } else {
     showOnboarding();
   }
-
-  setupEventListeners();
 }
 
 /**
- * Load ingredients and meals from the bundled JSON, and the schedule from
- * localStorage. Ingredients must land first — hydrateMeal resolves each meal's
- * itemId against them. Every step degrades to an empty list on failure.
+ * Bootstrap data from Supabase, seeding a brand new account from the bundled
+ * starter JSON so the app is never empty on first sign-in.
  */
 async function bootstrapData() {
-  // Ingredients source of truth: bundled ingredients.json
-  try {
-    const items = await loadIngredients();
-    setIngredients(items);
-  } catch (err) {
-    console.warn('Could not load bundled ingredients.json', err);
-    setIngredients([]);
+  if (await isAccountEmpty()) {
+    await seedStarterData();
   }
 
-  // Meals source of truth: bundled menu.json
-  try {
-    const mealObjects = await loadMeals();
-    const meals = mealObjects.map(obj => hydrateMeal(obj));
-    setMeals(meals.filter(Boolean));
-  } catch (err) {
-    console.warn('Could not load bundled menu.json', err);
-    setMeals([]);
-  }
+  const items = await loadIngredients();
+  setIngredients(items);
 
-  // Load schedule from localStorage
-  const savedSchedule = localStorage.getItem('mealPrepSchedule');
-  if (savedSchedule) {
-    try {
-      const parsed = JSON.parse(savedSchedule);
-      setSchedule(Array.isArray(parsed) ? parsed : []);
-    } catch (err) {
-      console.error('Failed to load saved schedule', err);
-      setSchedule([]);
-    }
-  } else {
-    setSchedule([]);
+  // Ingredients must land first: hydrateMeal resolves each itemId against them.
+  const mealObjects = await loadMeals();
+  setMeals(mealObjects.map((obj) => hydrateMeal(obj)).filter(Boolean));
+
+  setSchedule(await loadSchedule());
+
+  await loadSupplementsState();
+}
+
+/* ---------------------------------------------------------------- auth UI */
+
+function showAuthScreen() {
+  document.getElementById('auth-screen')?.classList.remove('hidden');
+  document.getElementById('app')?.classList.add('hidden');
+  document.getElementById('onboarding-modal')?.classList.add('hidden');
+
+  setIngredients([]);
+  setMeals([]);
+  setSchedule([]);
+}
+
+function hideAuthScreen() {
+  document.getElementById('auth-screen')?.classList.add('hidden');
+  showAuthError('');
+}
+
+function showAuthError(message) {
+  const el = document.getElementById('auth-error');
+  if (!el) return;
+  el.textContent = message || '';
+  el.classList.toggle('hidden', !message);
+}
+
+function setAuthBusy(busy, label) {
+  const submit = document.getElementById('auth-submit');
+  const status = document.getElementById('auth-status');
+
+  if (submit) submit.disabled = busy;
+  if (status) {
+    status.textContent = busy ? (label || 'Working…') : '';
+    status.classList.toggle('hidden', !busy);
   }
 }
+
+function setupAuthScreenListeners() {
+  const form = document.getElementById('auth-form');
+  const emailInput = document.getElementById('auth-email');
+  const passwordInput = document.getElementById('auth-password');
+  const submitBtn = document.getElementById('auth-submit');
+  const toggleBtn = document.getElementById('auth-toggle-mode');
+  const title = document.getElementById('auth-title');
+
+  let mode = 'signin';
+
+  const applyMode = () => {
+    const signingIn = mode === 'signin';
+    if (title) title.textContent = signingIn ? 'Sign in' : 'Create an account';
+    if (submitBtn) submitBtn.textContent = signingIn ? 'Sign in' : 'Sign up';
+    if (toggleBtn) {
+      toggleBtn.textContent = signingIn
+        ? 'No account? Create one'
+        : 'Already have an account? Sign in';
+    }
+    showAuthError('');
+  };
+
+  applyMode();
+
+  toggleBtn?.addEventListener('click', () => {
+    mode = mode === 'signin' ? 'signup' : 'signin';
+    applyMode();
+  });
+
+  form?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+
+    const email = (emailInput?.value || '').trim();
+    const password = passwordInput?.value || '';
+
+    if (!email || !password) {
+      showAuthError('Enter an email and password.');
+      return;
+    }
+    if (mode === 'signup' && password.length < 6) {
+      showAuthError('Password must be at least 6 characters.');
+      return;
+    }
+
+    showAuthError('');
+    setAuthBusy(true, mode === 'signin' ? 'Signing in…' : 'Creating account…');
+
+    const result = mode === 'signin'
+      ? await signIn(email, password)
+      : await signUp(email, password);
+
+    if (result.error) {
+      showAuthError(result.error);
+      setAuthBusy(false);
+      return;
+    }
+
+    if (result.needsConfirmation) {
+      setAuthBusy(false);
+      showAuthError('Check your inbox to confirm your email, then sign in.');
+      mode = 'signin';
+      applyMode();
+      showAuthError('Check your inbox to confirm your email, then sign in.');
+      return;
+    }
+
+    if (passwordInput) passwordInput.value = '';
+    await startSession();
+  });
+}
+
+/* ------------------------------------------------------------- app screens */
 
 /**
  * Show onboarding modal
@@ -99,11 +222,11 @@ function showOnboarding() {
   const onboardingModal = document.getElementById('onboarding-modal');
   const app = document.getElementById('app');
   const startDaySelect = document.getElementById('start-day');
-  
+
   onboardingModal.classList.remove('hidden');
   app.classList.add('hidden');
   startDaySelect.value = state.startDay;
-  
+
   // Pre-fill onboarding fields if profile data exists
   if (state.profile) {
     const fields = {
@@ -115,7 +238,7 @@ function showOnboarding() {
       'onboarding-goal-weight': state.profile.goalWeight,
       'onboarding-goal-months': state.profile.goalMonths
     };
-    
+
     Object.entries(fields).forEach(([id, value]) => {
       const element = document.getElementById(id);
       if (element && value) element.value = value;
@@ -129,10 +252,10 @@ function showOnboarding() {
 function showApp() {
   const onboardingModal = document.getElementById('onboarding-modal');
   const app = document.getElementById('app');
-  
+
   onboardingModal.classList.add('hidden');
   app.classList.remove('hidden');
-  
+
   // Render all components
   renderShoppingList();
   renderSchedule();
@@ -141,12 +264,6 @@ function showApp() {
   renderIngredients();
   renderSupplements();
   renderProfileCard();
-
-  if (isFileSystemSupported() && (!getIngredientsFileHandle() || !getMealsFileHandle())) {
-    setTimeout(() => {
-      showToast('Connect ingredients.json and menu.json in Settings before saving changes.', 'default');
-    }, 300);
-  }
 }
 
 /**
@@ -155,10 +272,10 @@ function showApp() {
 function setupEventListeners() {
   const startBtn = document.getElementById('start-btn');
   const tabBtns = document.querySelectorAll('.tab-btn');
-  
+
   // Onboarding submit
   startBtn.addEventListener('click', handleOnboardingSubmit);
-  
+
   // Tab navigation
   tabBtns.forEach(btn => {
     btn.addEventListener('click', () => {
@@ -166,7 +283,7 @@ function setupEventListeners() {
       switchTab(tabId);
     });
   });
-  
+
   // Shopping list reset
   const resetShoppingBtn = document.getElementById('reset-shopping');
   const resetWrapper = document.querySelector('.reset-wrapper');
@@ -186,7 +303,7 @@ function setupEventListeners() {
     resetWrapper.classList.remove('confirming');
     showToast('Shopping list reset', 'success');
   });
-  
+
   setupSettingsListeners({
     onScheduleChanged: () => {
       renderSchedule();
@@ -207,7 +324,8 @@ function setupEventListeners() {
       renderShoppingList();
     },
     onSupplementsChanged: renderSupplements,
-    onShowOnboarding: showOnboarding
+    onShowOnboarding: showOnboarding,
+    onSignedOut: showAuthScreen
   });
   setupProfileListeners();
   setupScheduleListeners();
@@ -223,7 +341,7 @@ function setupEventListeners() {
   setupIngredientsListeners();
   setupSupplementsListeners();
   setupMealDetailNavigation();
-  
+
   setupSearchListeners();
   setupScheduleViewListeners();
   setupSettingsNavigation();
@@ -235,7 +353,7 @@ function setupEventListeners() {
 async function handleOnboardingSubmit() {
   const onboardingModal = document.getElementById('onboarding-modal');
   const startDaySelect = document.getElementById('start-day');
-  
+
   // Get all onboarding values
   const age = parseInt(document.getElementById('onboarding-age')?.value, 10);
   const sex = document.getElementById('onboarding-sex')?.value || 'male';
@@ -244,11 +362,11 @@ async function handleOnboardingSubmit() {
   const activityLevel = parseFloat(document.getElementById('onboarding-activity')?.value) || 1.55;
   const goalWeight = parseFloat(document.getElementById('onboarding-goal-weight')?.value);
   const goalMonths = parseInt(document.getElementById('onboarding-goal-months')?.value, 10);
-  
+
   // Validate required fields
   clearValidationErrors(onboardingModal);
   let hasError = false;
-  
+
   const validations = [
     { value: age, min: 15, max: 100, id: 'onboarding-age', msg: 'Please enter a valid age (15-100)' },
     { value: weight, min: 30, max: 300, id: 'onboarding-weight', msg: 'Please enter a valid weight (30-300 kg)' },
@@ -256,16 +374,16 @@ async function handleOnboardingSubmit() {
     { value: goalWeight, min: 30, max: 300, id: 'onboarding-goal-weight', msg: 'Please enter a valid goal weight (30-300 kg)' },
     { value: goalMonths, min: 1, max: 24, id: 'onboarding-goal-months', msg: 'Please enter a valid timeframe (1-24 months)' }
   ];
-  
+
   validations.forEach(({ value, min, max, id, msg }) => {
     if (!value || value < min || value > max) {
       showFieldError(document.getElementById(id), msg);
       hasError = true;
     }
   });
-  
+
   if (hasError) return;
-  
+
   // Update profile
   updateProfile({
     age,
@@ -276,7 +394,7 @@ async function handleOnboardingSubmit() {
     goalWeight,
     goalMonths
   });
-  
+
   // Calculate calories
   const metrics = calculateProfileMetrics(state.profile);
   if (metrics) {
@@ -285,18 +403,22 @@ async function handleOnboardingSubmit() {
       recommendedCalories: metrics.recommendedCalories
     });
   }
-  
+
   updateState({ startDay: parseInt(startDaySelect.value, 10), onboarded: true });
-  
+
+  // Onboarding is the one write worth waiting on — a reload before it lands
+  // would drop the user straight back into onboarding.
+  await flushState();
+
   showApp();
-  
+
   // Show success toast with calorie info
   if (state.profile.maintenanceCalories && state.profile.recommendedCalories) {
     const diff = state.profile.maintenanceCalories - state.profile.recommendedCalories;
     const direction = diff > 0 ? 'deficit' : diff < 0 ? 'surplus' : '';
     showToast(`Daily target: ${state.profile.recommendedCalories} kcal${direction ? ` (${Math.abs(diff)} kcal ${direction})` : ''}`, 'success');
   }
-  
+
 }
 
 /**
@@ -305,11 +427,11 @@ async function handleOnboardingSubmit() {
 function setupSearchListeners() {
   const menuSearch = document.getElementById('menu-search');
   const ingredientsSearch = document.getElementById('ingredients-search');
-  
+
   if (menuSearch) {
     menuSearch.addEventListener('input', (e) => filterMenuCards(e.target.value));
   }
-  
+
   if (ingredientsSearch) {
     ingredientsSearch.addEventListener('input', (e) => filterIngredients(e.target.value));
   }
@@ -365,7 +487,7 @@ function setupSettingsNavigation() {
   const settingsTab = document.getElementById('settings-tab');
   const tabBtns = document.querySelectorAll('.tab-btn');
   const tabPanels = document.querySelectorAll('.tab-panel');
-  
+
   if (settingsBtn) {
     settingsBtn.addEventListener('click', () => {
       savePreviousTab();

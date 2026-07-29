@@ -3,23 +3,12 @@
  */
 
 import { dataStore, setIngredients, setMeals, setSchedule } from '../core/dataStore.js';
-import { FoodItem } from '../core/models.js';
-import {
-  isFileSystemSupported,
-  selectIngredientsFile,
-  selectMealsFile,
-  loadIngredientsFromFile,
-  loadMealsFromFile,
-  clearFileHandle,
-  clearIngredientsFileHandle,
-  clearMealsFileHandle,
-  getIngredientsFileHandle,
-  getMealsFileHandle
-} from '../services/fileSystem.js';
-import { loadIngredients, loadMeals } from '../core/dataLoader.js';
+import { loadIngredients, loadMeals, seedStarterData } from '../core/dataLoader.js';
 import { hydrateMeal } from '../core/mealSerde.js';
+import { supabase, describeError } from '../services/supabase.js';
+import { requireUserId, getCurrentUser, signOut } from '../services/auth.js';
 import { state, updateState, saveState, resetState } from '../services/state.js';
-import { saveIngredients, saveMeals, saveSchedule } from '../services/storage.js';
+import { saveIngredients, saveSchedule } from '../services/storage.js';
 import { clearSupplementsData } from './supplements.js';
 import { showToast } from '../utils/feedback.js';
 
@@ -51,23 +40,29 @@ export function setupSettingsListeners({
   onIngredientsChanged,
   onMealsChanged,
   onSupplementsChanged,
-  onShowOnboarding
+  onShowOnboarding,
+  onSignedOut
 } = {}) {
   const settingsStartDay = document.getElementById('settings-start-day');
   const clearShoppingBtn = document.getElementById('clear-shopping-data');
   const deleteIngredientsBtn = document.getElementById('delete-ingredients-data');
   const deleteAllBtn = document.getElementById('delete-all-data');
 
-  const connectIngredientsFileBtn = document.getElementById('connect-ingredients-file');
-  const connectBothFilesBtn = document.getElementById('connect-both-files');
-  const disconnectFileBtn = document.getElementById('disconnect-ingredients-file');
-  const ingredientsFileStatus = document.getElementById('ingredients-file-status');
-  const disconnectIngredientsItem = document.getElementById('disconnect-ingredients-item');
+  const accountEmail = document.getElementById('account-email');
+  const signOutBtn = document.getElementById('sign-out-btn');
 
-  const connectMealsFileBtn = document.getElementById('connect-meals-file');
-  const disconnectMealsFileBtn = document.getElementById('disconnect-meals-file');
-  const mealsFileStatus = document.getElementById('meals-file-status');
-  const disconnectMealsItem = document.getElementById('disconnect-meals-item');
+  if (accountEmail) {
+    accountEmail.textContent = getCurrentUser()?.email || 'Not signed in';
+  }
+
+  signOutBtn?.addEventListener('click', async () => {
+    const { error } = await signOut();
+    if (error) {
+      showToast(error, 'error');
+      return;
+    }
+    onSignedOut?.();
+  });
 
   if (settingsStartDay) {
     settingsStartDay.value = String(state.startDay);
@@ -76,139 +71,6 @@ export function setupSettingsListeners({
       onScheduleChanged?.();
       showToast('Start day updated', 'success');
     });
-  }
-
-  async function updateFileSystemUI() {
-    const hasIngredientsFile = !!getIngredientsFileHandle();
-    const hasMealsFile = !!getMealsFileHandle();
-
-    if (ingredientsFileStatus && disconnectIngredientsItem && connectIngredientsFileBtn) {
-      if (hasIngredientsFile) {
-        ingredientsFileStatus.textContent = '✓ Connected to ingredients.json - changes auto-save';
-        ingredientsFileStatus.style.color = 'var(--success)';
-        disconnectIngredientsItem.style.display = 'flex';
-        connectIngredientsFileBtn.innerHTML = '<span class="material-symbols-rounded">sync</span> Connect Other File';
-      } else {
-        ingredientsFileStatus.textContent = 'No file connected. Changes require selecting ingredients.json each session.';
-        ingredientsFileStatus.style.color = '';
-        disconnectIngredientsItem.style.display = 'none';
-        connectIngredientsFileBtn.innerHTML = '<span class="material-symbols-rounded">attach_file</span> Select File';
-      }
-    }
-
-    if (mealsFileStatus && disconnectMealsItem && connectMealsFileBtn) {
-      if (hasMealsFile) {
-        mealsFileStatus.textContent = '✓ Connected to menu.json - changes auto-save';
-        mealsFileStatus.style.color = 'var(--success)';
-        disconnectMealsItem.style.display = 'flex';
-        connectMealsFileBtn.innerHTML = '<span class="material-symbols-rounded">sync</span> Connect Other File';
-      } else {
-        mealsFileStatus.textContent = 'No file connected. Changes require selecting menu.json each session.';
-        mealsFileStatus.style.color = '';
-        disconnectMealsItem.style.display = 'none';
-        connectMealsFileBtn.innerHTML = '<span class="material-symbols-rounded">attach_file</span> Select File';
-      }
-    }
-  }
-
-  if (isFileSystemSupported()) {
-    updateFileSystemUI();
-
-    const connectIngredients = async () => {
-      const fileHandle = await selectIngredientsFile();
-      if (!fileHandle) return false;
-
-      const ingredientsData = await loadIngredientsFromFile(fileHandle);
-      if (ingredientsData && Array.isArray(ingredientsData)) {
-        setIngredients(ingredientsData.map((obj) => new FoodItem(obj)));
-        onIngredientsChanged?.();
-        await updateFileSystemUI();
-        showToast('Connected to ingredients.json', 'success');
-        return true;
-      } else {
-        showToast('Invalid ingredients file', 'error');
-        return false;
-      }
-    };
-
-    const connectMeals = async () => {
-      const fileHandle = await selectMealsFile();
-      if (!fileHandle) return false;
-
-      const mealsData = await loadMealsFromFile(fileHandle);
-      if (mealsData && Array.isArray(mealsData)) {
-        setMeals(mealsData.map(obj => hydrateMeal(obj)).filter(Boolean));
-        onMealsChanged?.();
-        await updateFileSystemUI();
-        showToast('Connected to menu.json', 'success');
-        return true;
-      }
-
-      showToast('Invalid menu file', 'error');
-      return false;
-    };
-
-    connectIngredientsFileBtn?.addEventListener('click', async () => {
-      await connectIngredients();
-    });
-
-    connectBothFilesBtn?.addEventListener('click', async () => {
-      const ingredientsConnected = await connectIngredients();
-      if (!ingredientsConnected) {
-        showToast('Setup canceled before ingredients.json was connected', 'default');
-        return;
-      }
-
-      const mealsConnected = await connectMeals();
-      if (!mealsConnected) {
-        showToast('Ingredients connected. Connect menu.json to finish setup', 'default');
-        return;
-      }
-
-      showToast('Both files connected successfully', 'success');
-    });
-
-    disconnectFileBtn?.addEventListener('click', async () => {
-      await clearIngredientsFileHandle();
-      const defaultIngredients = await loadIngredients();
-      setIngredients(defaultIngredients);
-      onIngredientsChanged?.();
-      await updateFileSystemUI();
-      showToast('Disconnected. Reverted to bundled ingredients.json', 'success');
-    });
-
-    connectMealsFileBtn?.addEventListener('click', async () => {
-      await connectMeals();
-    });
-
-    disconnectMealsFileBtn?.addEventListener('click', async () => {
-      await clearMealsFileHandle();
-      const defaultMeals = await loadMeals();
-      setMeals(defaultMeals.map(obj => hydrateMeal(obj)).filter(Boolean));
-      onMealsChanged?.();
-      await updateFileSystemUI();
-      showToast('Disconnected. Reverted to bundled menu.json', 'success');
-    });
-  } else {
-    if (connectIngredientsFileBtn) {
-      connectIngredientsFileBtn.disabled = true;
-      connectIngredientsFileBtn.innerHTML = '<span class="material-symbols-rounded">block</span> Not Supported';
-    }
-    if (connectBothFilesBtn) {
-      connectBothFilesBtn.disabled = true;
-      connectBothFilesBtn.innerHTML = '<span class="material-symbols-rounded">block</span> Not Supported';
-    }
-    if (ingredientsFileStatus) {
-      ingredientsFileStatus.textContent = 'File System Access API not supported in this browser. Use Chrome or Edge.';
-    }
-
-    if (connectMealsFileBtn) {
-      connectMealsFileBtn.disabled = true;
-      connectMealsFileBtn.innerHTML = '<span class="material-symbols-rounded">block</span> Not Supported';
-    }
-    if (mealsFileStatus) {
-      mealsFileStatus.textContent = 'File System Access API not supported in this browser. Use Chrome or Edge.';
-    }
   }
 
   setupDestructiveAction(clearShoppingBtn, () => {
@@ -220,15 +82,11 @@ export function setupSettingsListeners({
   });
 
   setupDestructiveAction(deleteIngredientsBtn, async () => {
-    if (!getIngredientsFileHandle()) {
-      showToast('Connect ingredients.json first', 'error');
-      return;
-    }
-
+    const previous = [...dataStore.ingredients];
     setIngredients([]);
-    const saved = await saveIngredients();
-    if (!saved) {
-      showToast('Failed to save ingredients.json', 'error');
+
+    if (!await saveIngredients()) {
+      setIngredients(previous);
       return;
     }
 
@@ -237,28 +95,41 @@ export function setupSettingsListeners({
   });
 
   setupDestructiveAction(deleteAllBtn, async () => {
-    localStorage.removeItem('mealPrepState');
-    localStorage.removeItem('mealPrepSchedule');
-    clearSupplementsData();
+    try {
+      const userId = requireUserId();
 
-    await clearFileHandle();
+      for (const table of ['ingredients', 'meals', 'schedules']) {
+        const { error } = await supabase.from(table).delete().eq('user_id', userId);
+        if (error) throw error;
+      }
 
-    resetState();
-    const defaultIngredients = await loadIngredients();
-    const defaultMeals = await loadMeals();
-    setIngredients(defaultIngredients);
-    setMeals(defaultMeals.map(obj => hydrateMeal(obj)).filter(Boolean));
-    setSchedule([]);
-    await saveIngredients();
-    await saveMeals();
-    saveSchedule();
+      await clearSupplementsData();
+      await resetState();
 
-    onSupplementsChanged?.();
+      // Put the starter menu back, matching what a brand new account gets.
+      await seedStarterData();
 
-    showToast('All data deleted', 'success');
+      const items = await loadIngredients();
+      setIngredients(items);
 
-    setTimeout(() => {
-      onShowOnboarding?.();
-    }, 500);
+      const meals = await loadMeals();
+      setMeals(meals.map((obj) => hydrateMeal(obj)).filter(Boolean));
+
+      setSchedule([]);
+      await saveSchedule();
+
+      onIngredientsChanged?.();
+      onMealsChanged?.();
+      onSupplementsChanged?.();
+
+      showToast('All data deleted', 'success');
+
+      setTimeout(() => {
+        onShowOnboarding?.();
+      }, 500);
+    } catch (err) {
+      console.error('Failed to delete all data', err);
+      showToast(describeError(err), 'error');
+    }
   });
 }

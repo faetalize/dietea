@@ -198,7 +198,6 @@ async function handleIngredientCreate() {
   const saved = await saveIngredients();
   if (!saved) {
     setIngredients(previousIngredients);
-    showToast('Connect ingredients.json in Settings before saving changes', 'error');
     return;
   }
 
@@ -237,7 +236,6 @@ async function handleIngredientsImport(event) {
     const saved = await saveIngredients();
     if (!saved) {
       setIngredients(previousIngredients);
-      showToast('Connect ingredients.json in Settings before importing', 'error');
       return;
     }
 
@@ -322,7 +320,6 @@ async function handleIngredientEdit() {
   const saved = await saveIngredients();
   if (!saved) {
     setIngredients(previousIngredients);
-    showToast('Connect ingredients.json in Settings before saving changes', 'error');
     return;
   }
 
@@ -340,7 +337,6 @@ async function deleteIngredient(ingredientId) {
   const saved = await saveIngredients();
   if (!saved) {
     setIngredients(previousIngredients);
-    showToast('Connect ingredients.json in Settings before deleting', 'error');
     return;
   }
 

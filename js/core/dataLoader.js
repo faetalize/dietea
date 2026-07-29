@@ -1,37 +1,130 @@
+/**
+ * Loads ingredients and meals from Supabase.
+ *
+ * ingredients.json and menu.json are no longer the database — they survive only
+ * as the starter dataset seeded into a brand new account, so a fresh sign-up
+ * lands in a usable app instead of an empty one.
+ */
+
 import { FoodItem } from './models.js';
+import { supabase, assertOk } from '../services/supabase.js';
+import { requireUserId } from '../services/auth.js';
+
+/**
+ * Column list matches the FoodItem constructor exactly, so rows need no mapping.
+ */
+const INGREDIENT_COLUMNS = 'id, name, category, unit, kcal, carb_per_unit, protein_per_unit, lipid_per_unit';
+const MEAL_COLUMNS = 'id, name, type, ingredients, instructions';
 
 export async function loadIngredients() {
-  const candidates = ['./ingredients.json'];
-  let response = null;
+  const { data, error } = await supabase
+    .from('ingredients')
+    .select(INGREDIENT_COLUMNS)
+    .order('name');
 
-  for (const url of candidates) {
-    const r = await fetch(url, { cache: 'no-cache' });
-    if (r.ok) {
-      response = r;
-      break;
-    }
-  }
-
-  if (!response) throw new Error('Failed to load ingredients.json');
-
-  const raw = await response.json();
-  return raw.map(item => new FoodItem(item));
+  assertOk(error, 'Could not load ingredients');
+  return (data || []).map((row) => new FoodItem(row));
 }
 
+/**
+ * Returns plain objects, not Meal instances — pass them through hydrateMeal so
+ * each itemId resolves against the already-loaded ingredients.
+ */
 export async function loadMeals() {
-  const candidates = ['./menu.json'];
-  let response = null;
+  const { data, error } = await supabase
+    .from('meals')
+    .select(MEAL_COLUMNS)
+    .order('name');
 
-  for (const url of candidates) {
-    const r = await fetch(url, { cache: 'no-cache' });
-    if (r.ok) {
-      response = r;
-      break;
-    }
+  assertOk(error, 'Could not load meals');
+  return data || [];
+}
+
+export async function loadSchedule() {
+  const { data, error } = await supabase
+    .from('schedules')
+    .select('days')
+    .maybeSingle();
+
+  assertOk(error, 'Could not load schedule');
+  return Array.isArray(data?.days) ? data.days : [];
+}
+
+/**
+ * Seed a new account from the bundled JSON.
+ *
+ * Only runs when the account has no ingredients and no meals at all, so it can
+ * never overwrite real data — a user who deliberately deleted everything gets
+ * the starter set back, which matches what the old "delete all data" did.
+ */
+export async function seedStarterData() {
+  const userId = requireUserId();
+
+  const [bundledIngredients, bundledMeals] = await Promise.all([
+    fetchJson('./ingredients.json'),
+    fetchJson('./menu.json')
+  ]);
+
+  if (bundledIngredients.length) {
+    const rows = bundledIngredients.map((item) => ({
+      user_id: userId,
+      id: item.id,
+      name: item.name,
+      category: item.category || 'Uncategorized',
+      unit: item.unit,
+      kcal: item.kcal ?? 0,
+      carb_per_unit: item.carb_per_unit ?? 0,
+      protein_per_unit: item.protein_per_unit ?? 0,
+      lipid_per_unit: item.lipid_per_unit ?? 0
+    }));
+
+    const { error } = await supabase.from('ingredients').upsert(rows, { onConflict: 'user_id,id' });
+    assertOk(error, 'Could not seed ingredients');
   }
 
-  if (!response) return [];
+  if (bundledMeals.length) {
+    const rows = bundledMeals.map((meal) => ({
+      user_id: userId,
+      id: meal.id,
+      name: meal.name,
+      type: meal.type,
+      ingredients: meal.ingredients || [],
+      instructions: meal.instructions || []
+    }));
 
-  const raw = await response.json();
-  return Array.isArray(raw) ? raw : [];
+    const { error } = await supabase.from('meals').upsert(rows, { onConflict: 'user_id,id' });
+    assertOk(error, 'Could not seed meals');
+  }
+
+  return {
+    ingredients: bundledIngredients.length,
+    meals: bundledMeals.length
+  };
+}
+
+/**
+ * True when the account has never been populated.
+ */
+export async function isAccountEmpty() {
+  const [ingredients, meals] = await Promise.all([
+    supabase.from('ingredients').select('id', { count: 'exact', head: true }),
+    supabase.from('meals').select('id', { count: 'exact', head: true })
+  ]);
+
+  assertOk(ingredients.error, 'Could not check ingredients');
+  assertOk(meals.error, 'Could not check meals');
+
+  return (ingredients.count || 0) === 0 && (meals.count || 0) === 0;
+}
+
+async function fetchJson(url) {
+  try {
+    const response = await fetch(url, { cache: 'no-cache' });
+    if (!response.ok) return [];
+    const parsed = await response.json();
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (err) {
+    console.warn(`Could not read starter data from ${url}`, err);
+    return [];
+  }
 }
