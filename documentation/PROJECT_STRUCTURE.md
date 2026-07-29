@@ -83,6 +83,29 @@ UI. Each module renders into elements that already exist in `index.html` and att
 own listeners. Components read from `dataStore` and `state` directly rather than
 receiving props.
 
+## Styling
+
+One stylesheet, `main.css`, dark only. There is no build step, so it is plain CSS with
+custom properties as the design system — surfaces, text, accent, spacing, radii and
+easing are all declared once in `:root`. Reach for a token rather than a literal.
+
+Depth comes from layered surfaces (`--surface` → `--surface-2` → `--surface-3`) and
+hairline borders rather than shadows, which read as muddy on a dark background. Colour is
+rationed: one accent (`--primary`) plus four meal hues that double as the macro colours.
+
+Two things to know before editing:
+
+- **Layout is mobile-first at the breakpoints, not the base.** Base rules describe the
+  desktop shell; `@media (max-width: 768px)` moves the tab bar to the bottom, turns modals
+  into bottom sheets, and collapses grids. `env(safe-area-inset-bottom)` keeps the bar
+  clear of the home indicator, which is why `index.html` sets `viewport-fit=cover`.
+- **The base input rules use attribute selectors** (`input[type="text"]`), so a bare class
+  like `.search-input` loses on specificity. Qualify overrides with the element —
+  `input.search-input` — or they silently do nothing.
+
+Numeric readouts set `font-variant-numeric: tabular-nums` so figures do not jitter as they
+update.
+
 ## Startup sequence
 
 `main.js` runs on `DOMContentLoaded`:
