@@ -1,6 +1,8 @@
 /**
  * Meal Prep Planner - Main Entry Point
- * Fully refactored modular structure
+ *
+ * Bootstraps data, chooses onboarding vs. app, and wires every component's
+ * listeners exactly once. Rendering lives in js/components/.
  */
 
 // Core data and models
@@ -34,9 +36,6 @@ import { renderSupplements, setupSupplementsListeners } from './js/components/su
 import { setupSettingsListeners } from './js/components/settings.js';
 import { renderProfileCard, setupProfileListeners } from './js/components/profile.js';
 
-// Legacy file - for temporary delegation of unmigrated functions
-// (legacy file removed after full migration)
-
 /**
  * Initialize the application
  */
@@ -54,7 +53,9 @@ async function init() {
 }
 
 /**
- * Bootstrap data from storage
+ * Load ingredients and meals from the bundled JSON, and the schedule from
+ * localStorage. Ingredients must land first — hydrateMeal resolves each meal's
+ * itemId against them. Every step degrades to an empty list on failure.
  */
 async function bootstrapData() {
   // Ingredients source of truth: bundled ingredients.json
