@@ -38,9 +38,24 @@ function getWeightKg() {
   return 75;
 }
 
+/**
+ * Total daily fluid need is commonly estimated at ~35 ml per kg of body weight,
+ * but that covers ALL water including what comes from food, which is typically
+ * 20-30% of the total. This tracker only counts water you actually drink, so
+ * the goal is the drinking share of that total — food is assumed to cover the
+ * rest rather than being logged.
+ */
+const TOTAL_FLUID_ML_PER_KG = 35;
+const DRINKING_SHARE = 0.75; // assumes ~25% of total water comes from food
+
 function getGoals() {
   const weight = getWeightKg();
-  const waterGoalMl = Math.round(weight * 35);
+
+  // Rounded to the nearest 50 ml — this is a ballpark, and a goal of
+  // "1,969 ml" would imply precision the estimate does not have.
+  const rawGoal = weight * TOTAL_FLUID_ML_PER_KG * DRINKING_SHARE;
+  const waterGoalMl = Math.round(rawGoal / 50) * 50;
+
   const proteinGoalG = Math.round(weight * 1.6);
   return { waterGoalMl, proteinGoalG };
 }
@@ -182,7 +197,10 @@ export function renderSupplements() {
 
     <div class="supplements-water-card">
       <div class="supplements-water-header">
-        <h3>Water Intake</h3>
+        <div class="supplements-water-title">
+          <h3>Water Intake</h3>
+          <span class="supplements-water-hint">Water you drink — food is assumed to cover the rest</span>
+        </div>
         <label class="supplements-inline-setting">
           Bottle (ml)
           <input id="supplements-bottle-size" type="number" min="100" max="2000" step="50" value="${trackerState.bottleSize}">

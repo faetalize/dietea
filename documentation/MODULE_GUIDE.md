@@ -445,9 +445,20 @@ today's, the module starts a fresh day and carries the bottle-size preference fo
 
 Today's tracker is held in a module-level variable so `renderSupplements()` stays
 synchronous. Mutations update that variable immediately and persist in the background, so
-the UI never waits on the network. Goals scale off `state.profile.weight` — 35 ml/kg water, 1.6 g/kg protein —
-defaulting to 75 kg when no profile is set. The list itself is a hardcoded `SUPPLEMENTS`
-constant in the module, not user data.
+the UI never waits on the network.
+
+Goals scale off `state.profile.weight`, defaulting to 75 kg when no profile is set:
+1.6 g/kg protein, and water at 75% of the ~35 ml/kg total-fluid estimate, rounded to the
+nearest 50 ml.
+
+That 75% is the whole point. 35 ml/kg is a *total* fluid figure covering water from food
+as well as drink, but only bottles are logged here — so the goal is the drinking share,
+and food is assumed to cover the rest. Tracking the full 35 ml/kg in bottles would
+overstate the target by roughly a third.
+
+The supplement list itself is a hardcoded `SUPPLEMENTS` constant in the module, not user
+data. Its ids are the keys inside the `completed` JSONB column, so renaming an id orphans
+that supplement's history; renaming a label is free.
 
 ### `js/components/profile.js`
 

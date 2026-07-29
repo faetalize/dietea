@@ -3074,3 +3074,14 @@ body {
 .btn-link:hover {
     color: var(--text);
 }
+
+.supplements-water-title {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+
+.supplements-water-hint {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
