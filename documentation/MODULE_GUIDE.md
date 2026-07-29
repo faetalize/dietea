@@ -366,7 +366,8 @@ user saves, so cancelling discards cleanly. Saving a week with no meals stores a
 schedule rather than a week of empty days.
 
 One day can be marked a **cheat day**: marking it clears its meals, excludes it from
-calorie totals, and surfaces the leftover weekly calories as its budget.
+calorie totals, and surfaces the leftover weekly calories as its budget. In practice that
+lands around 15% above an average day.
 
 **Auto-generate** fills the week from the meals available. Per day it draws up to 500
 random candidate sets, discards any over the daily calorie budget, and keeps the best by
@@ -375,6 +376,17 @@ calorie gap. If every draw is over budget it falls back to greedily fitting the
 lowest-calorie meals. Lunch and dinner share one pool; a slot with no matching meal type
 falls back to the full meal list. Targets are 1.6 g/kg protein and 0.8 g/kg fat (floored
 at 0.6 g/kg when calories are tight), with carbs filling the remainder.
+
+The daily calorie budget is always `weeklyTarget / 7`, **never divided by the number of
+days actually being scheduled**. Dividing by 6 when a cheat day exists would hand each
+remaining day ~17% more calories and leave the cheat day with almost nothing, contradicting
+the overview — and it made the outcome depend on the order of operations, since generating
+first and marking a cheat day afterwards budgeted per calendar day while doing it the other
+way round did not. Per-calendar-day budgeting makes both orders agree.
+
+Macro targets are per-day and have no weekly component: `proteinMinG` is derived from body
+weight alone, so a cheat day never inflates the protein target on the days around it, and a
+shortfall on one day is never made up on another.
 
 ### `js/components/menu.js`
 

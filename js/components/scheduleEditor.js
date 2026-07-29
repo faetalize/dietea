@@ -483,7 +483,17 @@ function autoGenerateSchedule() {
 
   const existingCheatDay = tempSchedule.findIndex((d) => d.isCheatDay);
   const daysToSchedule = existingCheatDay >= 0 ? 6 : 7;
-  const dailyBudget = weeklyTarget ? Math.floor(weeklyTarget / daysToSchedule) : null;
+
+  // Always divide by 7, never by daysToSchedule. Spreading the whole week across
+  // six days would hand each of them ~17% more calories and leave the cheat day
+  // with almost nothing — the opposite of the point, and contradicting the
+  // overview, which reports the cheat day budget as whatever the plan leaves over.
+  //
+  // It also made the result depend on the order of operations: generating first
+  // and marking a cheat day afterwards left a sensible ~15% surplus, while
+  // marking it first and then generating did not. Budgeting per calendar day
+  // makes both orders agree.
+  const dailyBudget = weeklyTarget ? Math.floor(weeklyTarget / 7) : null;
   const macroTargets = getDailyMacroTargets(dailyBudget || state.profile?.recommendedCalories || state.profile?.maintenanceCalories || 2000);
 
   const newSchedule = [];
