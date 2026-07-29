@@ -104,17 +104,23 @@ export async function seedStarterData() {
 
 /**
  * True when the account has never been populated.
+ *
+ * Deliberately a plain `select ... limit 1` rather than a `head: true` count.
+ * A HEAD response carries no body, so a failed HEAD gives supabase-js an error
+ * with no code and no message — which stripped the actionable text off the very
+ * first request the app makes. Fetching one row is also cheaper than an exact
+ * count, which has to scan.
  */
 export async function isAccountEmpty() {
   const [ingredients, meals] = await Promise.all([
-    supabase.from('ingredients').select('id', { count: 'exact', head: true }),
-    supabase.from('meals').select('id', { count: 'exact', head: true })
+    supabase.from('ingredients').select('id').limit(1),
+    supabase.from('meals').select('id').limit(1)
   ]);
 
   assertOk(ingredients.error, 'Could not check ingredients');
   assertOk(meals.error, 'Could not check meals');
 
-  return (ingredients.count || 0) === 0 && (meals.count || 0) === 0;
+  return !ingredients.data?.length && !meals.data?.length;
 }
 
 async function fetchJson(url) {

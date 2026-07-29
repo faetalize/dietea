@@ -41,7 +41,21 @@ export function describeError(error) {
     return 'Could not reach the server. Check your connection.';
   }
 
-  return error.message || 'Something went wrong.';
+  if (error.message) return error.message;
+
+  // Some responses carry no body to parse — a failed HEAD request being the
+  // classic case — so there is no code or message to report. Say what is
+  // actually known rather than "something went wrong", and name the most
+  // likely cause for the status.
+  const status = error.status ?? error.statusCode;
+  if (status === 406) {
+    return `HTTP 406 with no detail. The "${SUPABASE_SCHEMA}" schema is most likely not exposed by the API — add it under Project Settings → API → Exposed schemas.`;
+  }
+  if (status) {
+    return `The server rejected the request with HTTP ${status} and no detail.`;
+  }
+
+  return 'The server returned an error with no detail.';
 }
 
 /**
