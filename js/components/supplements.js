@@ -48,15 +48,42 @@ function getWeightKg() {
 const TOTAL_FLUID_ML_PER_KG = 35;
 const DRINKING_SHARE = 0.75; // assumes ~25% of total water comes from food
 
-function getGoals() {
+/**
+ * Fluid needs do not scale linearly with body mass. Fat-free mass is roughly
+ * 70-75% water while adipose tissue is only 10-40%, so a straight ml/kg figure
+ * overestimates for heavier bodies — at 110 kg the raw number asks for nearly
+ * 3 L of drinking water, well past what the estimate actually supports.
+ *
+ * Clinical practice handles this with adjusted body weight: ideal weight for
+ * height, plus a fraction of the excess. Below ideal weight the actual weight
+ * is used unchanged, so this only ever tapers the goal and never inflates it.
+ *
+ * Devine ideal weight and the 0.4 factor are both conventions rather than
+ * precision. This is a ballpark by design; thirst remains the better signal,
+ * and activity, heat, and sweat move it far more than body weight does.
+ */
+function getAdjustedWeightKg() {
   const weight = getWeightKg();
+  const heightCm = Number(state?.profile?.height);
 
+  // No height on file — fall back to actual weight.
+  if (!Number.isFinite(heightCm) || heightCm <= 0) return weight;
+
+  const inchesOverFiveFeet = Math.max(0, heightCm / 2.54 - 60);
+  const base = state?.profile?.sex === 'female' ? 45.5 : 50;
+  const idealWeight = base + 2.3 * inchesOverFiveFeet;
+
+  if (weight <= idealWeight) return weight;
+  return idealWeight + 0.4 * (weight - idealWeight);
+}
+
+function getGoals() {
   // Rounded to the nearest 50 ml — this is a ballpark, and a goal of
   // "1,969 ml" would imply precision the estimate does not have.
-  const rawGoal = weight * TOTAL_FLUID_ML_PER_KG * DRINKING_SHARE;
+  const rawGoal = getAdjustedWeightKg() * TOTAL_FLUID_ML_PER_KG * DRINKING_SHARE;
   const waterGoalMl = Math.round(rawGoal / 50) * 50;
 
-  const proteinGoalG = Math.round(weight * 1.6);
+  const proteinGoalG = Math.round(getWeightKg() * 1.6);
   return { waterGoalMl, proteinGoalG };
 }
 

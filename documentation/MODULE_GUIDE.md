@@ -447,14 +447,24 @@ Today's tracker is held in a module-level variable so `renderSupplements()` stay
 synchronous. Mutations update that variable immediately and persist in the background, so
 the UI never waits on the network.
 
-Goals scale off `state.profile.weight`, defaulting to 75 kg when no profile is set:
-1.6 g/kg protein, and water at 75% of the ~35 ml/kg total-fluid estimate, rounded to the
-nearest 50 ml.
+Goals scale off `state.profile`, defaulting to 75 kg when nothing is set: protein at
+1.6 g/kg of actual weight, and water at 75% of the ~35 ml/kg total-fluid estimate applied
+to *adjusted* weight, rounded to the nearest 50 ml.
 
-That 75% is the whole point. 35 ml/kg is a *total* fluid figure covering water from food
-as well as drink, but only bottles are logged here — so the goal is the drinking share,
-and food is assumed to cover the rest. Tracking the full 35 ml/kg in bottles would
-overstate the target by roughly a third.
+Two corrections are baked into that water figure, and both matter:
+
+- **The 75% share.** 35 ml/kg is a *total* fluid figure covering water from food as well
+  as drink, but only bottles are logged here. Tracking the full amount in bottles would
+  overstate the drinking target by roughly a third.
+- **Adjusted body weight.** Fluid needs do not scale linearly with mass — fat-free mass is
+  ~70-75% water against ~10-40% for adipose tissue — so a straight ml/kg figure
+  overestimates for heavier bodies. `getAdjustedWeightKg()` takes Devine ideal weight for
+  height and sex, then adds 40% of any excess. Below ideal weight the actual weight is
+  used unchanged, so this only ever tapers the goal. At 180 cm it changes nothing up to
+  75 kg, and pulls a 110 kg goal from 2,900 ml down to 2,350 ml.
+
+Both are conventions, not precision. If `height` is missing the adjustment is skipped and
+actual weight is used.
 
 The supplement list itself is a hardcoded `SUPPLEMENTS` constant in the module, not user
 data. Its ids are the keys inside the `completed` JSONB column, so renaming an id orphans
