@@ -23,17 +23,38 @@ The app has five tabs plus a settings panel:
 | Supplements | Daily supplement adherence and water tracking |
 | Settings (gear) | Profile, start day, account, and destructive data actions |
 
-## Required project setting
+## Exposing the schema
 
 All tables live in a dedicated `dietea` Postgres schema rather than `public`. PostgREST
-only serves schemas that are explicitly exposed, and it does not expose `dietea` by
-default.
+only serves schemas that are explicitly exposed, and a custom schema is never exposed by
+default. Until it is, every request fails with `PGRST106` and the app surfaces
+*"The dietea schema is not exposed by the API…"*.
 
-> **Supabase dashboard → Project Settings → API → Exposed schemas → add `dietea` → Save.**
+On this project it is **already done**, applied as PostgREST in-database configuration:
 
-Until that is done, every request fails with `PGRST106` and the app surfaces:
-*"The dietea schema is not exposed by the API…"*. This is a one-time setting per project;
-nothing in the codebase can change it.
+```sql
+alter role authenticator set pgrst.db_schemas = 'public, graphql_public, dietea';
+notify pgrst, 'reload config';
+notify pgrst, 'reload schema';
+```
+
+**Both notifies are required.** `reload config` alone makes reads start working while
+writes keep failing with a bare `404` and an empty body — adding a schema changes which
+tables PostgREST has introspected, and that cache only rebuilds on `reload schema`. That
+failure is very hard to read, because an empty body means the error carries no code or
+message at all.
+
+To undo it: `alter role authenticator reset pgrst.db_schemas;` plus the same two notifies.
+
+### Caveat: the dashboard no longer reflects reality
+
+In-database config takes precedence over the platform's own setting, so **Project
+Settings → API → Exposed schemas will still show only `public` and `graphql_public`**, and
+editing it there may appear to do nothing.
+
+If you would rather have one source of truth, set `dietea` in the dashboard and then
+`reset` the role setting above. Doing it through the dashboard is the more conventional
+route; it was done in SQL here only because the dashboard was not reachable at the time.
 
 ## Getting started
 

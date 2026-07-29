@@ -128,9 +128,27 @@ async function fetchJson(url) {
     const response = await fetch(url, { cache: 'no-cache' });
     if (!response.ok) return [];
     const parsed = await response.json();
-    return Array.isArray(parsed) ? parsed : [];
+    return Array.isArray(parsed) ? dedupeById(parsed) : [];
   } catch (err) {
     console.warn(`Could not read starter data from ${url}`, err);
     return [];
   }
+}
+
+/**
+ * Keep the first entry for each id.
+ *
+ * A duplicate id was harmless when these files were the database — lookups used
+ * `.find()`, which just took the first match. Postgres is stricter: a single
+ * upsert batch containing the same primary key twice fails outright with
+ * "ON CONFLICT DO UPDATE command cannot affect row a second time", which would
+ * break seeding for the whole account.
+ */
+function dedupeById(entries) {
+  const seen = new Set();
+  return entries.filter((entry) => {
+    if (!entry?.id || seen.has(entry.id)) return false;
+    seen.add(entry.id);
+    return true;
+  });
 }

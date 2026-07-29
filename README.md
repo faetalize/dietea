@@ -22,13 +22,13 @@ origin.
 
 ## Setup
 
-The Supabase project is already configured in [js/config.js](js/config.js), and the
-schema is applied. One project setting is required before the app can read anything:
+Nothing to do. The Supabase project is configured in [js/config.js](js/config.js), the
+schema is applied, and the `dietea` schema is exposed to the API. Sign up or sign in and
+your account is seeded with a starter ingredient database and menu.
 
-> **Supabase dashboard → Project Settings → API → Exposed schemas → add `dietea`.**
-
-Without it every request fails with `PGRST106`, and the app will say so. See
-[documentation/README.md](documentation/README.md) for the details.
+If you point this at a **different** Supabase project, you will need to apply the
+migrations in `supabase/migrations/` and expose the schema — see
+[documentation/README.md](documentation/README.md).
 
 ## Docs
 
