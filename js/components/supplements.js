@@ -171,6 +171,36 @@ async function saveTrackerState(nextState) {
 }
 
 /**
+ * Today's tracker, for callers that need to read it without rendering —
+ * the AI session context reports what has been logged so far today.
+ */
+export function getTrackerState() {
+  return trackerState;
+}
+
+/**
+ * Apply an approved proposal to today's tracker.
+ *
+ * Water is set absolutely rather than incremented: the agent is told to send a
+ * total, so "I drank another bottle" resolves to a number on its side and this
+ * stays idempotent if a proposal is somehow applied twice.
+ */
+export async function applySupplementChanges({ waterConsumedMl, bottleSizeMl, completed } = {}) {
+  const next = { ...trackerState, completed: { ...trackerState.completed } };
+
+  if (Number.isFinite(waterConsumedMl)) next.waterConsumed = Math.max(0, Math.round(waterConsumedMl));
+  if (Number.isFinite(bottleSizeMl)) next.bottleSize = Math.min(2000, Math.max(100, Math.round(bottleSizeMl)));
+
+  for (const entry of completed || []) {
+    if (entry?.id) next.completed[entry.id] = !!entry.done;
+  }
+
+  const ok = await saveTrackerState(next);
+  renderSupplements();
+  return ok;
+}
+
+/**
  * Drop all persisted supplement tracking for the signed-in user.
  * Used by Settings → Delete all data. The caller re-renders; this stays silent
  * so it can be folded into a larger reset without stacking toasts.

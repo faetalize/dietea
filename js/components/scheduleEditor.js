@@ -4,6 +4,7 @@
 
 import { dataStore, getMealById, setSchedule } from '../core/dataStore.js';
 import { state } from '../services/state.js';
+import { calculateMacroTargets } from '../services/calories.js';
 import { saveSchedule } from '../services/storage.js';
 import { titleCase, defaultTimeForSlot, DAY_NAMES } from '../utils/helpers.js';
 import { showToast } from '../utils/feedback.js';
@@ -343,35 +344,7 @@ function randomFrom(list = []) {
 }
 
 function getDailyMacroTargets(dailyCalories) {
-  const weight = Number(state.profile?.weight);
-  const safeWeight = Number.isFinite(weight) && weight > 0 ? weight : 75;
-  const safeCalories = Number.isFinite(dailyCalories) && dailyCalories > 0 ? dailyCalories : 2000;
-
-  const proteinMinG = Math.max(0, Math.round(safeWeight * 1.6));
-  const proteinKcal = proteinMinG * 4;
-
-  const fatTargetG = Math.max(0, Math.round(safeWeight * 0.8));
-  const fatFloorG = Math.max(0, Math.round(safeWeight * 0.6));
-  const maxFatByRemaining = Math.max(0, Math.floor((safeCalories - proteinKcal) / 9));
-
-  let fatsTargetG = fatTargetG;
-  if (fatsTargetG > maxFatByRemaining) {
-    fatsTargetG = Math.max(Math.min(fatFloorG, maxFatByRemaining), 0);
-  }
-
-  const carbsTargetKcal = Math.max(0, safeCalories - proteinKcal - fatsTargetG * 9);
-  const carbsTargetG = Math.round(carbsTargetKcal / 4);
-
-  return {
-    proteinMinG,
-    fatsMinG: Math.min(fatFloorG, maxFatByRemaining),
-    proteinTargetG: proteinMinG,
-    carbsTargetG,
-    fatsTargetG,
-    proteinRatio: safeCalories > 0 ? proteinKcal / safeCalories : 0,
-    carbsRatio: safeCalories > 0 ? carbsTargetKcal / safeCalories : 0,
-    fatsRatio: safeCalories > 0 ? (fatsTargetG * 9) / safeCalories : 0
-  };
+  return calculateMacroTargets(dailyCalories, state.profile?.weight);
 }
 
 function getRandomizedSlotPools(meals) {
@@ -402,7 +375,7 @@ function sumDayMacros(selectedMeals = []) {
 }
 
 function scoreDayCandidate(macros, dailyBudget, targets) {
-  const proteinShortfall = Math.max(0, targets.proteinMinG - macros.protein);
+  const proteinShortfall = Math.max(0, targets.proteinG - macros.protein);
   const fatsShortfall = Math.max(0, targets.fatsMinG - macros.lipids);
   const minPenalty = proteinShortfall + fatsShortfall;
 
@@ -522,7 +495,7 @@ function autoGenerateSchedule() {
 
     if (!dailyBudget || dayResult.macros.kcal <= dailyBudget) underBudgetDays++;
 
-    const proteinMet = dayResult.macros.protein >= macroTargets.proteinMinG;
+    const proteinMet = dayResult.macros.protein >= macroTargets.proteinG;
     const fatsMet = dayResult.macros.lipids >= macroTargets.fatsMinG;
     if (proteinMet && fatsMet) macroMinDays++;
 
@@ -643,14 +616,14 @@ export function renderScheduleOverview() {
   `;
 
   if (dailyMacroTargets) {
-    const totalProteinTarget = dailyMacroTargets.proteinMinG * dayCount;
-    const totalCarbTarget = dailyMacroTargets.carbsTargetG * dayCount;
+    const totalProteinTarget = dailyMacroTargets.proteinG * dayCount;
+    const totalCarbTarget = dailyMacroTargets.carbsG * dayCount;
     const totalFatTarget = dailyMacroTargets.fatsMinG * dayCount;
 
     macrosTargetEl.innerHTML = `
       <span class="overview-target-row">
         <span class="overview-target-label">Daily</span>
-        <span class="overview-macro-row">${formatMacroPills({ protein: dailyMacroTargets.proteinMinG, carbs: dailyMacroTargets.carbsTargetG, fats: dailyMacroTargets.fatsMinG })}</span>
+        <span class="overview-macro-row">${formatMacroPills({ protein: dailyMacroTargets.proteinG, carbs: dailyMacroTargets.carbsG, fats: dailyMacroTargets.fatsMinG })}</span>
       </span>
       <span class="overview-target-row">
         <span class="overview-target-label">Total target (${dayCount}d)</span>

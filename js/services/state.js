@@ -20,6 +20,15 @@ function defaultState() {
     onboarded: false,
     startDay: 1,
     checkedItems: {},
+    // AI preferences are deliberately NOT secret and live as plain columns, so
+    // the settings panel can render before the credential vault is unlocked.
+    // `vault` is ciphertext — see js/services/credentials.js.
+    ai: {
+      vault: null,
+      model: 'gpt-5.6-terra',
+      provider: 'apikey',
+      reasoningEffort: 'medium'
+    },
     profile: {
       age: null,
       sex: 'male',
@@ -51,6 +60,12 @@ function rowToState(row) {
     onboarded: !!row.onboarded,
     startDay: row.start_day ?? base.startDay,
     checkedItems: row.checked_items && typeof row.checked_items === 'object' ? row.checked_items : {},
+    ai: {
+      vault: row.ai_vault && typeof row.ai_vault === 'object' ? row.ai_vault : null,
+      model: row.ai_model || base.ai.model,
+      provider: row.ai_provider || base.ai.provider,
+      reasoningEffort: row.ai_reasoning_effort || base.ai.reasoningEffort
+    },
     profile: {
       age: row.age ?? null,
       sex: row.sex || 'male',
@@ -71,6 +86,10 @@ function stateToRow(userId) {
     onboarded: state.onboarded,
     start_day: state.startDay,
     checked_items: state.checkedItems,
+    ai_vault: state.ai.vault,
+    ai_model: state.ai.model,
+    ai_provider: state.ai.provider,
+    ai_reasoning_effort: state.ai.reasoningEffort,
     age: state.profile.age,
     sex: state.profile.sex,
     weight_kg: state.profile.weight,
@@ -170,10 +189,26 @@ export function updateProfile(profileUpdates) {
 }
 
 /**
+ * Merge into the AI preference block. Kept separate from updateState() because
+ * that one replaces top-level keys wholesale, which would silently drop the
+ * vault whenever a caller only meant to change the model.
+ */
+export function updateAiSettings(updates) {
+  state.ai = { ...state.ai, ...updates };
+  saveState();
+}
+
+/**
  * Reset to defaults and persist immediately.
+ *
+ * Credentials survive. "Delete all data" means the meal plan, not the account —
+ * the user stays signed into Supabase, so logging them out of OpenAI as a side
+ * effect would be surprising, and re-linking Codex is not a trivial step.
  */
 export async function resetState() {
   requireUserId();
+  const credentials = state.ai;
   state = defaultState();
+  state.ai = credentials;
   return flushState();
 }

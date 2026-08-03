@@ -5,6 +5,7 @@
 import { state, updateProfile } from '../services/state.js';
 import {
   calculateProfileMetrics,
+  calculateMacroTargets,
   getActivityLevelLabel,
   isGoalRealistic
 } from '../services/calories.js';
@@ -106,29 +107,14 @@ export function renderProfileCard() {
 
 function renderMacroBreakdown(targetCalories, modeEl, valuesEl, wheelEl) {
   const mode = MACRO_VIEW_MODES[macroViewIndex];
-  const weight = Number(state.profile?.weight);
-  const safeWeight = Number.isFinite(weight) && weight > 0 ? weight : 75;
-
-  const proteinG = Math.round(safeWeight * 1.6);
-  const proteinKcal = proteinG * 4;
-
-  const fatTargetG = Math.round(safeWeight * 0.8);
-  const fatFloorG = Math.round(safeWeight * 0.6);
-  const maxFatByRemaining = Math.max(0, Math.floor((targetCalories - proteinKcal) / 9));
-
-  let fatsG = fatTargetG;
-  if (fatsG > maxFatByRemaining) {
-    fatsG = Math.max(Math.min(fatFloorG, maxFatByRemaining), 0);
-  }
-
-  const fatsKcal = fatsG * 9;
-  const carbsKcal = Math.max(0, targetCalories - proteinKcal - fatsKcal);
-  const carbsG = Math.round(carbsKcal / 4);
   const noteEl = el('macro-breakdown-note');
 
-  const proteinPct = targetCalories > 0 ? Math.round((proteinKcal / targetCalories) * 100) : 0;
-  const fatsPct = targetCalories > 0 ? Math.round((fatsKcal / targetCalories) * 100) : 0;
-  const carbsPct = Math.max(0, 100 - proteinPct - fatsPct);
+  const {
+    proteinG, proteinKcal, proteinPct,
+    carbsG, carbsKcal, carbsPct,
+    fatsG, fatsKcal, fatsPct,
+    fatTargetG, fatFloorG, isFatLimited
+  } = calculateMacroTargets(targetCalories, state.profile?.weight);
 
   const rowsByMode = {
     percent: [
@@ -174,7 +160,7 @@ function renderMacroBreakdown(targetCalories, modeEl, valuesEl, wheelEl) {
   }
 
   if (noteEl) {
-    const fatMode = fatsG < fatTargetG ? 'calorie-limited floor mode' : 'standard fat target mode';
+    const fatMode = isFatLimited ? 'calorie-limited floor mode' : 'standard fat target mode';
     noteEl.textContent = `Rules: protein = 1.6g/kg (${proteinG}g), fat target = 0.8g/kg (${fatTargetG}g), fat floor = 0.6g/kg (${fatFloorG}g). Current: ${fatMode}; carbs fill remaining calories.`;
   }
 }

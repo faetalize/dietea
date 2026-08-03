@@ -1499,6 +1499,22 @@ input.search-input { padding-left: 2.6rem; border-radius: var(--radius-full); }
 .setting-select { width: auto; min-width: 150px; }
 .setting-item-danger .setting-label { color: var(--error); }
 
+/* Rows whose control is too tall to sit beside its label */
+.setting-item-stacked { flex-direction: column; align-items: stretch; gap: var(--sp-3); }
+.setting-stack { display: flex; flex-direction: column; gap: var(--sp-2); }
+.setting-inline { display: flex; gap: var(--sp-2); align-items: center; }
+.setting-inline .setting-input { flex: 1; min-width: 0; }
+/* Qualified with the element: the base input rules are attribute selectors, so
+   a bare .setting-input class would lose on specificity and do nothing. */
+input.setting-input { width: 100%; font-family: inherit; }
+.setting-warning { color: var(--warning); }
+.setting-description code {
+    padding: 0.1em 0.35em;
+    background: var(--surface-3);
+    border-radius: 4px;
+    font-size: 0.9em;
+}
+
 .profile-card {
     padding: var(--sp-5);
     background: var(--surface);
@@ -1598,6 +1614,405 @@ input.search-input { padding-left: 2.6rem; border-radius: var(--radius-full); }
 
 /* ============================================================ responsive */
 
+/* ============================================================ assistant
+
+   z-index slots into the existing stack: nav 100, auth 1200, modal 2000,
+   toast 3000. The pill sits above content but below the auth screen; the panel
+   below modals so a meal form opened from it still stacks on top; the preview
+   above modals since it is opened from the panel and must cover it. */
+
+.chat-pill {
+    position: fixed;
+    right: var(--sp-6);
+    bottom: var(--sp-6);
+    z-index: 1150;
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    padding: var(--sp-3) var(--sp-5);
+    background: var(--primary);
+    color: var(--primary-contrast);
+    border: none;
+    border-radius: var(--radius-full);
+    font-family: inherit;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+    transition: transform var(--t-fast), background var(--t-fast);
+}
+.chat-pill:hover { background: var(--primary-hover); transform: translateY(-1px); }
+.chat-pill.is-open { opacity: 0; pointer-events: none; }
+.chat-pill .material-symbols-rounded { font-size: 1.25rem; }
+
+.chat-panel {
+    position: fixed;
+    right: var(--sp-5);
+    bottom: var(--sp-5);
+    z-index: 1800;
+    display: flex;
+    flex-direction: column;
+    width: min(420px, calc(100vw - var(--sp-8)));
+    height: min(640px, calc(100dvh - var(--sp-10)));
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-xl);
+    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
+    overflow: hidden;
+    animation: pop 220ms var(--ease);
+}
+.chat-panel.is-dropping { outline: 2px dashed var(--primary); outline-offset: -6px; }
+
+.chat-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--sp-4) var(--sp-4) var(--sp-3);
+    border-bottom: 1px solid var(--border);
+}
+.chat-title { display: flex; align-items: center; gap: var(--sp-2); }
+.chat-title h2 { font-size: 1rem; }
+.chat-title .material-symbols-rounded { color: var(--primary); font-size: 1.25rem; }
+.chat-header-actions { display: flex; gap: var(--sp-1); }
+
+.chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--sp-4);
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
+}
+
+.chat-intro { color: var(--text-muted); font-size: 0.875rem; text-align: center; margin: auto 0; }
+.chat-intro-note { margin-top: var(--sp-2); font-size: 0.8125rem; color: var(--text-muted); opacity: 0.8; }
+
+.chat-message { font-size: 0.875rem; line-height: 1.55; max-width: 100%; }
+.chat-message p + p { margin-top: var(--sp-2); }
+.chat-message ul { margin: var(--sp-2) 0 0 var(--sp-4); display: flex; flex-direction: column; gap: 0.2rem; }
+.chat-message code {
+    padding: 0.1em 0.35em;
+    background: var(--surface-3);
+    border-radius: 4px;
+    font-size: 0.9em;
+}
+
+.chat-message-user {
+    align-self: flex-end;
+    max-width: 85%;
+    padding: var(--sp-3) var(--sp-4);
+    background: var(--primary-dim);
+    border: 1px solid rgba(52, 211, 153, 0.2);
+    border-radius: var(--radius-lg) var(--radius-lg) var(--radius-sm) var(--radius-lg);
+}
+.chat-message-files { font-size: 0.75rem; color: var(--text-muted); margin-bottom: var(--sp-1); }
+.chat-message-assistant { align-self: flex-start; color: var(--text); }
+.chat-error { color: var(--error); }
+.chat-empty { color: var(--text-muted); font-style: italic; }
+
+/* Tool trajectory. A multi-step turn showing nothing reads as frozen. */
+.chat-steps { display: flex; flex-direction: column; gap: var(--sp-1); }
+.chat-step {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+}
+.chat-step-spinner {
+    width: 13px;
+    height: 13px;
+    border: 2px solid var(--surface-3);
+    border-top-color: var(--primary);
+    border-radius: 50%;
+    animation: chat-spin 700ms linear infinite;
+    flex-shrink: 0;
+}
+@keyframes chat-spin { to { transform: rotate(360deg); } }
+.chat-step-icon { font-size: 0.9375rem !important; color: var(--primary); }
+.chat-step.is-done { color: var(--text-secondary); }
+.chat-step-detail { color: var(--text-muted); font-size: 0.75rem; }
+
+@media (prefers-reduced-motion: reduce) {
+    .chat-step-spinner { animation-duration: 2s; }
+}
+
+/* ---------------------------------------------------------- proposal card */
+
+.chat-message-proposal { align-self: stretch; max-width: 100%; }
+.chat-proposal {
+    padding: var(--sp-4);
+    background: var(--surface-2);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-lg);
+}
+.chat-message-proposal.is-decided .chat-proposal { opacity: 0.65; }
+
+.chat-proposal-summary { font-weight: 600; margin-bottom: var(--sp-3); }
+.chat-proposal-ask { margin-top: var(--sp-3); color: var(--text-secondary); font-size: 0.8125rem; }
+.chat-proposal-actions {
+    display: flex;
+    gap: var(--sp-2);
+    margin-top: var(--sp-3);
+    flex-wrap: wrap;
+}
+.chat-proposal-actions .btn { flex: 1; min-width: 0; }
+.chat-proposal-status { color: var(--primary); font-size: 0.8125rem; font-weight: 500; }
+
+.chat-changes { display: flex; flex-direction: column; gap: var(--sp-3); }
+.chat-change {
+    padding: var(--sp-3);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+}
+.chat-change-create { border-left-color: var(--success); }
+.chat-change-update { border-left-color: var(--warning); }
+.chat-change-delete { border-left-color: var(--error); }
+
+.chat-change-head { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
+.chat-change-op {
+    padding: 0.1rem 0.4rem;
+    border-radius: var(--radius-full);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+.chat-op-create { background: var(--success-dim); color: var(--success); }
+.chat-op-update { background: var(--warning-dim); color: var(--warning); }
+.chat-op-delete { background: var(--error-dim); color: var(--error); }
+.chat-change-kind { font-size: 0.75rem; color: var(--text-muted); }
+.chat-change-note { margin-top: var(--sp-2); font-size: 0.8125rem; color: var(--text-secondary); }
+
+.chat-fields {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: var(--sp-2);
+    margin-top: var(--sp-3);
+}
+.chat-field { display: flex; flex-direction: column; gap: 0.2rem; min-width: 0; }
+.chat-field > span { font-size: 0.6875rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.03em; }
+.chat-field input, .chat-field select {
+    width: 100%;
+    padding: 0.4rem 0.5rem;
+    font-size: 0.8125rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.chat-impact, .preview-impact {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--sp-2);
+    margin-top: var(--sp-3);
+    padding: var(--sp-2) var(--sp-3);
+    border-radius: var(--radius-sm);
+    font-size: 0.8125rem;
+    line-height: 1.45;
+}
+.chat-impact .material-symbols-rounded,
+.preview-impact .material-symbols-rounded { font-size: 1rem; flex-shrink: 0; margin-top: 0.1em; }
+.chat-impact-warn, .preview-impact-warn { background: var(--warning-dim); color: var(--warning); }
+.chat-impact-info, .preview-impact-info { background: var(--surface-3); color: var(--text-secondary); }
+
+/* ------------------------------------------------------- gate + composer */
+
+.chat-gate {
+    padding: var(--sp-4);
+    border-top: 1px solid var(--border);
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
+}
+.chat-gate-hint { font-size: 0.75rem; color: var(--text-muted); }
+.chat-unlock { display: flex; gap: var(--sp-2); }
+.chat-unlock input { flex: 1; min-width: 0; }
+
+.chat-composer { border-top: 1px solid var(--border); padding: var(--sp-3); }
+.chat-input-row { display: flex; align-items: flex-end; gap: var(--sp-2); }
+.chat-input-row textarea {
+    flex: 1;
+    min-height: 40px;
+    max-height: 140px;
+    resize: none;
+    font-family: inherit;
+    font-size: 0.875rem;
+    line-height: 1.45;
+}
+.chat-send, .chat-stop {
+    background: var(--primary);
+    color: var(--primary-contrast);
+    flex-shrink: 0;
+}
+.chat-send:hover { background: var(--primary-hover); }
+.chat-stop { background: var(--error); color: #fff; }
+
+.chat-attachments { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin-bottom: var(--sp-2); }
+.chat-attachment {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    padding: 0.25rem 0.25rem 0.25rem 0.5rem;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-full);
+    font-size: 0.75rem;
+    max-width: 100%;
+}
+.chat-attachment img { width: 24px; height: 24px; object-fit: cover; border-radius: var(--radius-full); }
+.chat-attachment-name { max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ========================================================= preview overlay */
+
+.proposal-preview { position: fixed; inset: 0; z-index: 2400; }
+.preview-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(4, 5, 7, 0.78);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    animation: fade 200ms var(--ease);
+}
+.preview-sheet {
+    position: absolute;
+    inset: var(--sp-8);
+    display: flex;
+    flex-direction: column;
+    max-width: var(--shell);
+    margin: 0 auto;
+    background: var(--bg);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-xl);
+    overflow: hidden;
+    animation: pop 240ms var(--ease);
+}
+
+.preview-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--sp-4);
+    padding: var(--sp-5);
+    border-bottom: 1px solid var(--border);
+}
+.preview-header h1 { font-size: 1.25rem; }
+.preview-header p { color: var(--text-secondary); font-size: 0.875rem; margin-top: 0.15rem; }
+
+.preview-body { flex: 1; overflow-y: auto; padding: var(--sp-5); display: flex; flex-direction: column; gap: var(--sp-8); }
+/* Direct child only. The schedule preview nests .schedule-day blocks, which
+   have their own h2 — a descendant selector here would shrink every day name
+   to a muted uppercase label. */
+.preview-section > h2 {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    font-size: 0.8125rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+    margin-bottom: var(--sp-4);
+}
+.preview-section > h2 .material-symbols-rounded { font-size: 1.125rem; }
+
+.preview-grid, .preview-week {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: var(--sp-4);
+}
+
+.preview-card { position: relative; }
+.preview-panel {
+    padding: var(--sp-4);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+}
+.preview-create { border-color: rgba(52, 211, 153, 0.4); }
+.preview-update { border-color: rgba(251, 191, 36, 0.4); }
+.preview-delete { border-color: rgba(248, 113, 113, 0.4); opacity: 0.85; }
+.preview-delete h3, .preview-delete .ingredient-name { text-decoration: line-through; }
+
+.preview-badge {
+    position: absolute;
+    top: var(--sp-3);
+    right: var(--sp-3);
+    padding: 0.1rem 0.45rem;
+    border-radius: var(--radius-full);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+.preview-badge.is-new { background: var(--success-dim); color: var(--success); }
+.preview-badge.is-updated { background: var(--warning-dim); color: var(--warning); }
+.preview-badge.is-removed { background: var(--error-dim); color: var(--error); }
+
+.preview-diff { margin-top: var(--sp-3); display: flex; flex-direction: column; gap: 0.3rem; }
+.preview-diff-row {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    font-size: 0.8125rem;
+    font-variant-numeric: tabular-nums;
+    flex-wrap: wrap;
+}
+.preview-diff-label { color: var(--text-muted); min-width: 90px; }
+.preview-diff-old { color: var(--text-muted); text-decoration: line-through; }
+.preview-diff-arrow { font-size: 0.875rem !important; color: var(--text-muted); }
+.preview-diff-new { color: var(--primary); font-weight: 500; }
+.preview-subtle { color: var(--text-muted); font-size: 0.8125rem; margin-top: var(--sp-2); }
+
+.preview-day { position: relative; }
+.preview-day-changed { border-color: rgba(251, 191, 36, 0.4); }
+.preview-day h2 { display: flex; align-items: center; gap: var(--sp-2); }
+.preview-day .preview-badge { position: static; }
+.preview-slots { display: flex; flex-direction: column; gap: 0.3rem; margin-top: var(--sp-3); }
+.preview-slot { display: flex; justify-content: space-between; gap: var(--sp-3); font-size: 0.8125rem; }
+.preview-slot-name { color: var(--text-muted); text-transform: capitalize; }
+.preview-slot-meal { text-align: right; }
+
+.preview-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-4);
+    padding: var(--sp-4) var(--sp-5);
+    border-top: 1px solid var(--border);
+}
+.preview-note { color: var(--text-muted); font-size: 0.8125rem; }
+
+/* --------------------------------------------------------- misc additions */
+
+.codex-modal-content { max-width: 520px; }
+.codex-steps {
+    margin: var(--sp-4) 0;
+    padding-left: var(--sp-5);
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    line-height: 1.5;
+}
+
+.dashboard-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--sp-3);
+    padding: var(--sp-12) var(--sp-5);
+    color: var(--text-muted);
+    text-align: center;
+}
+.dashboard-placeholder .material-symbols-rounded { font-size: 2.5rem !important; color: var(--surface-3); }
+.dashboard-placeholder h2 { font-size: 1.125rem; color: var(--text-secondary); }
+.dashboard-placeholder p { font-size: 0.875rem; }
+
+.btn-sm { padding: 0.4rem 0.7rem; font-size: 0.8125rem; }
+
 @media (max-width: 900px) {
     .profile-nutrition-card-wide { grid-column: 1 / -1; }
 
@@ -1632,7 +2047,7 @@ input.search-input { padding-left: 2.6rem; border-radius: var(--radius-full); }
         border-top: 1px solid var(--border);
     }
 
-    /* Let the five tabs and the settings button share one row evenly */
+    /* Let the six tabs and the settings button share one row evenly */
     .tab-buttons { display: contents; }
 
     .tab-btn,
@@ -1641,22 +2056,24 @@ input.search-input { padding-left: 2.6rem; border-radius: var(--radius-full); }
         min-width: 0;
         flex-direction: column;
         gap: 0.15rem;
-        padding: 0.4rem 0.15rem;
+        padding: 0.4rem 0.1rem;
         border-radius: var(--radius-sm);
     }
     .tab-btn:hover, .settings-btn:hover { background: none; }
     .tab-btn.active, .settings-btn.active { background: none; color: var(--primary); }
 
     .tab-btn .material-symbols-rounded,
-    .settings-btn .material-symbols-rounded { font-size: 1.3rem; }
+    .settings-btn .material-symbols-rounded { font-size: 1.2rem; }
 
-    /* Sized so the longest label ("Supplements") clears 375px / 6 without
-       ellipsis; the truncation rules stay as a safety net for odd widths. */
+    /* Seven items now (Dashboard was added), so each gets 375/7 ≈ 53px rather
+       than 62px. "Supplements" and "Dashboard" are the long ones; this size
+       clears them without ellipsis. The truncation rules stay as a safety net
+       for narrower devices, where the 340px block takes over. */
     .tab-label,
     .settings-btn::after {
-        font-size: 0.53125rem;
+        font-size: 0.5rem;
         font-weight: 500;
-        letter-spacing: -0.01em;
+        letter-spacing: -0.02em;
         max-width: 100%;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -1720,6 +2137,43 @@ input.search-input { padding-left: 2.6rem; border-radius: var(--radius-full); }
     .setting-action-wrapper > .btn { width: 100%; }
 
     .auth-card { padding: var(--sp-8) var(--sp-5); }
+
+    /* Assistant: pill rides above the tab bar, panel becomes a bottom sheet.
+       The toast container already sits at nav-h + sp-3, so the pill is offset
+       further up to keep a toast from landing underneath it. */
+    .chat-pill {
+        right: var(--sp-4);
+        bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + var(--sp-3));
+        padding: var(--sp-3) var(--sp-4);
+    }
+    /* Clear the pill, not just the nav. The pill occupies nav-h + 12px up to
+       roughly nav-h + 56px; 4.75rem puts the toast's bottom edge ~20px above
+       its top. Measured at 375px — a toast landing under the pill was the
+       collision this replaces. */
+    .toast-container { bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + 4.75rem); }
+
+    .chat-panel {
+        inset: auto 0 0 0;
+        width: 100%;
+        height: 88dvh;
+        border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+        border-bottom: none;
+        animation: sheet-up 280ms var(--ease);
+    }
+    .chat-composer { padding: var(--sp-3) var(--sp-3) calc(var(--sp-3) + env(safe-area-inset-bottom)); }
+    .chat-message-user { max-width: 92%; }
+
+    /* Full-bleed preview: the diff is the content, so give it the whole screen */
+    .preview-sheet {
+        inset: 0;
+        border: none;
+        border-radius: 0;
+    }
+    .preview-body { padding: var(--sp-4); gap: var(--sp-6); }
+    .preview-grid, .preview-week { grid-template-columns: 1fr; }
+    .preview-footer { flex-direction: column; align-items: stretch; gap: var(--sp-3); }
+    .preview-footer .btn { width: 100%; }
+    .preview-footer { padding-bottom: calc(var(--sp-4) + env(safe-area-inset-bottom)); }
 }
 
 @keyframes sheet-up {
@@ -1727,9 +2181,13 @@ input.search-input { padding-left: 2.6rem; border-radius: var(--radius-full); }
     to { transform: none; }
 }
 
-/* Only drop the nav labels on genuinely tiny screens — at 375px (iPhone SE and
-   friends) six labelled items still fit at ~62px each. */
-@media (max-width: 340px) {
+/* Only drop the nav labels on genuinely tiny screens. Measured at 375px with
+   seven items: each slot is 53px and the longest label ("Supplements") renders
+   at 48px, so labels still fit on every common phone. Below ~350px the slot
+   drops under the label width and they would start clipping. */
+@media (max-width: 350px) {
     .tab-label, .settings-btn::after { display: none; }
     .tab-btn, .settings-btn { padding: 0.55rem 0.15rem; }
+    .tab-btn .material-symbols-rounded,
+    .settings-btn .material-symbols-rounded { font-size: 1.35rem; }
 }

@@ -29,8 +29,11 @@ import { renderMenuCards, filterMenuCards, setupMenuListeners } from './js/compo
 import { setupMealCreationListeners } from './js/components/mealCreation.js';
 import { renderIngredients, filterIngredients, setupIngredientsListeners } from './js/components/ingredients.js';
 import { renderSupplements, setupSupplementsListeners, loadSupplementsState } from './js/components/supplements.js';
-import { setupSettingsListeners } from './js/components/settings.js';
+import { setupSettingsListeners, setupAiSettingsListeners } from './js/components/settings.js';
 import { renderProfileCard, setupProfileListeners } from './js/components/profile.js';
+import { setupChat, renderGate } from './js/components/chat.js';
+import { renderDashboard } from './js/components/dashboard.js';
+import { rememberPassword, initVault, lock } from './js/services/credentials.js';
 
 /** App listeners are wired once per page load, not once per sign-in. */
 let appListenersReady = false;
@@ -70,6 +73,11 @@ async function startSession() {
     setAuthBusy(false);
     return;
   }
+
+  // Must follow loadState(): the vault ciphertext arrives with the profile row.
+  // Never fatal — a vault that will not open is something Settings reports, not
+  // a reason to block someone from their meal plan.
+  await initVault();
 
   hideAuthScreen();
   setAuthBusy(false);
@@ -113,6 +121,12 @@ function showAuthScreen() {
   document.getElementById('auth-screen')?.classList.remove('hidden');
   document.getElementById('app')?.classList.add('hidden');
   document.getElementById('onboarding-modal')?.classList.add('hidden');
+  document.getElementById('chat-pill')?.classList.add('hidden');
+  document.getElementById('chat-panel')?.classList.add('hidden');
+
+  // Drop the decrypted credentials and the cached vault key. Signing out on a
+  // shared machine must not leave the next person one click from the API key.
+  lock();
 
   setIngredients([]);
   setMeals([]);
@@ -189,6 +203,10 @@ function setupAuthScreenListeners() {
     showAuthError('');
     setAuthBusy(true, mode === 'signin' ? 'Signing in…' : 'Creating account…');
 
+    // The only moment the password exists. initVault() consumes it right after
+    // the profile row loads; a restored session has to prompt instead.
+    rememberPassword(password);
+
     const result = mode === 'signin'
       ? await signIn(email, password)
       : await signUp(email, password);
@@ -255,6 +273,7 @@ function showApp() {
 
   onboardingModal.classList.add('hidden');
   app.classList.remove('hidden');
+  document.getElementById('chat-pill')?.classList.remove('hidden');
 
   // Render all components
   renderShoppingList();
@@ -264,6 +283,8 @@ function showApp() {
   renderIngredients();
   renderSupplements();
   renderProfileCard();
+  renderDashboard();
+  renderGate();
 }
 
 /**
@@ -341,6 +362,28 @@ function setupEventListeners() {
   setupIngredientsListeners();
   setupSupplementsListeners();
   setupMealDetailNavigation();
+
+  setupAiSettingsListeners({
+    // Provider or credential changes decide whether the chat shows its
+    // composer, an unlock prompt, or a pointer back to settings.
+    onCredentialsChanged: renderGate
+  });
+
+  setupChat({
+    // An accepted proposal can touch any collection, so everything re-renders.
+    // The app is small enough that being precise here would buy nothing but
+    // a chance to miss a view.
+    onApplied: () => {
+      renderIngredients();
+      renderMenuCards();
+      renderSchedule();
+      renderScheduleOverview();
+      renderShoppingList();
+      renderSupplements();
+      renderProfileCard();
+      renderDashboard();
+    }
+  });
 
   setupSearchListeners();
   setupScheduleViewListeners();

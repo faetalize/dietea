@@ -133,6 +133,10 @@
         <!-- Navigation Tabs -->
         <nav class="tab-nav">
             <div class="tab-buttons">
+                <button class="tab-btn" data-tab="dashboard">
+                    <span class="material-symbols-rounded">insights</span>
+                    <span class="tab-label">Dashboard</span>
+                </button>
                 <button class="tab-btn active" data-tab="shopping">
                     <span class="material-symbols-rounded">shopping_cart</span>
                     <span class="tab-label">Shopping</span>
@@ -161,6 +165,14 @@
 
         <!-- Tab Content -->
         <main class="tab-content">
+            <!-- Dashboard Tab -->
+            <section id="dashboard-tab" class="tab-panel">
+                <div class="section-header">
+                    <h1>Dashboard</h1>
+                </div>
+                <div id="dashboard-content"></div>
+            </section>
+
             <!-- Shopping List Tab -->
             <section id="shopping-tab" class="tab-panel active">
                 <div class="section-header">
@@ -452,6 +464,96 @@
                     </div>
                 </div>
 
+                <div class="settings-section" id="ai-settings-section">
+                    <h2>Assistant</h2>
+                    <div class="settings-content">
+                        <div class="setting-item setting-item-stacked">
+                            <div class="setting-info">
+                                <span class="setting-label">Credentials</span>
+                                <span class="setting-description" id="ai-vault-status">Checking…</span>
+                            </div>
+                            <div class="setting-stack" id="ai-vault-actions"></div>
+                        </div>
+
+                        <div class="setting-item setting-item-stacked">
+                            <div class="setting-info">
+                                <span class="setting-label">OpenAI API Key</span>
+                                <span class="setting-description">Encrypted with your account password before it is stored. Starts with <code>sk-</code>.</span>
+                            </div>
+                            <div class="setting-stack">
+                                <div class="setting-inline">
+                                    <input type="password" id="ai-api-key" class="setting-input" placeholder="sk-…" autocomplete="off" spellcheck="false">
+                                    <button id="ai-api-key-reveal" class="btn-icon" aria-label="Show key">
+                                        <span class="material-symbols-rounded">visibility</span>
+                                    </button>
+                                </div>
+                                <div class="setting-inline">
+                                    <button id="ai-save-key" class="btn btn-primary">
+                                        <span class="material-symbols-rounded">save</span>
+                                        Save key
+                                    </button>
+                                    <button id="ai-clear-key" class="btn btn-secondary btn-danger-hover">Remove</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="setting-item setting-item-stacked">
+                            <div class="setting-info">
+                                <span class="setting-label">Codex (ChatGPT subscription)</span>
+                                <span class="setting-description" id="ai-codex-status">Not connected.</span>
+                            </div>
+                            <div class="setting-stack" id="ai-codex-actions">
+                                <button id="ai-codex-connect" class="btn btn-secondary">
+                                    <span class="material-symbols-rounded">link</span>
+                                    Connect Codex
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="setting-item">
+                            <div class="setting-info">
+                                <span class="setting-label">Provider</span>
+                                <span class="setting-description" id="ai-provider-hint">Which credential the assistant uses.</span>
+                            </div>
+                            <select id="ai-provider" class="setting-select">
+                                <option value="apikey">OpenAI API key</option>
+                                <option value="codex">Codex subscription</option>
+                            </select>
+                        </div>
+
+                        <div class="setting-item">
+                            <div class="setting-info">
+                                <span class="setting-label">Model</span>
+                                <span class="setting-description" id="ai-model-hint"></span>
+                            </div>
+                            <select id="ai-model" class="setting-select"></select>
+                        </div>
+
+                        <div class="setting-item">
+                            <div class="setting-info">
+                                <span class="setting-label">Thinking effort</span>
+                                <span class="setting-description">Higher is slower and more thorough. Photos always use high.</span>
+                            </div>
+                            <select id="ai-effort" class="setting-select"></select>
+                        </div>
+
+                        <div class="setting-item setting-item-stacked">
+                            <div class="setting-info">
+                                <span class="setting-label">Change account password</span>
+                                <span class="setting-description">Use this rather than resetting elsewhere — it re-encrypts your saved credentials so they survive the change.</span>
+                            </div>
+                            <div class="setting-stack">
+                                <input type="password" id="ai-password-current" class="setting-input" placeholder="Current password" autocomplete="current-password">
+                                <input type="password" id="ai-password-next" class="setting-input" placeholder="New password (min 6 characters)" autocomplete="new-password">
+                                <button id="ai-change-password" class="btn btn-secondary">
+                                    <span class="material-symbols-rounded">key</span>
+                                    Change password &amp; rekey
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="settings-section">
                     <h2>Data Management</h2>
                     <div class="settings-content">
@@ -519,6 +621,90 @@
                 </div>
             </section>
         </main>
+    </div>
+
+    <!-- Assistant: floating pill + panel. Outside #app's tab content so it
+         survives tab switches and never scrolls away. -->
+    <button id="chat-pill" class="chat-pill hidden" aria-label="Open assistant">
+        <span class="material-symbols-rounded">auto_awesome</span>
+        <span class="chat-pill-label">Ask</span>
+    </button>
+
+    <div id="chat-panel" class="chat-panel hidden">
+        <header class="chat-header">
+            <div class="chat-title">
+                <span class="material-symbols-rounded">auto_awesome</span>
+                <h2>Assistant</h2>
+            </div>
+            <div class="chat-header-actions">
+                <button id="chat-clear" class="btn-icon" aria-label="Clear conversation">
+                    <span class="material-symbols-rounded">delete_sweep</span>
+                </button>
+                <button id="chat-close" class="btn-icon" aria-label="Close assistant">
+                    <span class="material-symbols-rounded">close</span>
+                </button>
+            </div>
+        </header>
+
+        <div id="chat-messages" class="chat-messages">
+            <div class="chat-intro">
+                <p>Ask about your week, or send a photo of a label or recipe.</p>
+                <p class="chat-intro-note">Anything that changes your data is shown for approval first.</p>
+            </div>
+        </div>
+
+        <div id="chat-gate" class="chat-gate hidden"></div>
+
+        <div id="chat-composer" class="chat-composer">
+            <div id="chat-attachments" class="chat-attachments hidden"></div>
+            <div class="chat-input-row">
+                <button id="chat-attach" class="btn-icon" aria-label="Attach a file">
+                    <span class="material-symbols-rounded">attach_file</span>
+                </button>
+                <textarea id="chat-input" rows="1" placeholder="Ask anything…"></textarea>
+                <button id="chat-send" class="btn-icon chat-send" aria-label="Send">
+                    <span class="material-symbols-rounded">arrow_upward</span>
+                </button>
+                <button id="chat-stop" class="btn-icon chat-stop hidden" aria-label="Stop">
+                    <span class="material-symbols-rounded">stop</span>
+                </button>
+            </div>
+            <input type="file" id="chat-file" accept="image/*,.pdf,.txt,.md,.csv,.json" multiple hidden>
+        </div>
+    </div>
+
+    <!-- Proposal preview overlay -->
+    <div id="proposal-preview" class="proposal-preview hidden"></div>
+
+    <!-- Codex OAuth: the callback lands on localhost:1455, which nothing is
+         listening on, so the user pastes the failed URL back here. -->
+    <div id="codex-modal" class="modal hidden">
+        <div class="modal-content codex-modal-content">
+            <span class="material-symbols-rounded modal-icon">link</span>
+            <h2>Connect Codex</h2>
+            <p>A tab will open for you to sign in to ChatGPT.</p>
+
+            <ol class="codex-steps">
+                <li>Approve the sign-in in the new tab.</li>
+                <li>It will land on a page that <strong>fails to load</strong> — that is expected.</li>
+                <li>Copy that page's full address and paste it below.</li>
+            </ol>
+
+            <label class="form-field">
+                <span>Callback URL</span>
+                <input type="text" id="codex-callback" placeholder="http://localhost:1455/auth/callback?code=…" spellcheck="false">
+            </label>
+
+            <p id="codex-error" class="auth-error hidden"></p>
+
+            <div class="form-actions">
+                <button id="codex-cancel" class="btn btn-secondary">Cancel</button>
+                <button id="codex-complete" class="btn btn-primary">
+                    <span class="material-symbols-rounded">check</span>
+                    Finish connecting
+                </button>
+            </div>
+        </div>
     </div>
 
     <!-- Category datalist for autocomplete -->

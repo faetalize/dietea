@@ -16,12 +16,15 @@ The app has five tabs plus a settings panel:
 
 | Tab | What it does |
 | --- | --- |
+| Dashboard | Placeholder for now |
 | Shopping | Ingredient totals aggregated from the current schedule, with checkable rows |
 | Schedule | The planned week as a list or a calendar, plus the schedule editor and weekly calorie/macro overview |
 | Menu | Meal cards; create, edit, delete, import, and drill into a meal's recipe |
 | Ingredients | The ingredient database; create, edit, delete, import |
 | Supplements | Daily supplement adherence and water tracking |
-| Settings (gear) | Profile, start day, account, and destructive data actions |
+| Settings (gear) | Profile, start day, account, assistant setup, and destructive data actions |
+
+Plus the assistant, reachable from the floating pill on every tab.
 
 ## Exposing the schema
 
@@ -80,7 +83,7 @@ row level security:
 
 | Table | Holds | Shape |
 | --- | --- | --- |
-| `dietea.profiles` | Body/goal profile, start day, onboarding flag, shopping checkmarks | One row per user |
+| `dietea.profiles` | Body/goal profile, start day, onboarding flag, shopping checkmarks, encrypted AI credentials | One row per user |
 | `dietea.ingredients` | The ingredient database | One row per ingredient |
 | `dietea.meals` | Recipes; nested entries and instructions are JSONB | One row per meal |
 | `dietea.schedules` | The 7-day plan | One row per user |
@@ -105,6 +108,104 @@ Row level security is what actually protects the data: every policy is
 `auth.uid() = user_id`, so the publishable key in `js/config.js` is safe to commit and a
 signed-out client can read nothing.
 
+## The assistant
+
+An OpenAI agent with read access to everything and write access to everything, gated by a
+proposal it shows you before anything is saved.
+
+### Setup
+
+Settings → Assistant. Either credential works:
+
+- **OpenAI API key** — paste it and save.
+- **Codex** — signs in with your ChatGPT subscription instead of paying per token.
+
+Both providers serve the **same models** — Sol (most capable), Terra (default), Luna
+(fastest) — so the model and thinking-effort settings apply to either. Codex is not a
+separate "codex model"; it is the same models behind a different endpoint.
+
+The three models differ in capability and cost, **not** context window — all three take
+1.05M tokens on the API. What changes the window is the provider: **Codex caps every model
+at 272k.**
+
+Thinking effort runs `none` / `low` / `medium` / `high` / `xhigh`. Attachments force at
+least `high`, since reading a photographed label is where the extra thinking pays.
+
+### Codex only works in local development
+
+The Codex backend answers CORS preflights for exactly three origins:
+`http://localhost:3000`, `http://localhost:5173`, and `https://chatgpt.com`. Everything
+else gets no `Access-Control-Allow-Origin` header at all and the browser blocks the
+request.
+
+That has two consequences worth stating plainly:
+
+- **`http://127.0.0.1:3000` does not work**, even though it is the same server as
+  `http://localhost:3000`. Origins compare as strings. Use the `localhost` spelling.
+- **A deployed build cannot use Codex.** On Cloudflare Pages or any other domain, the
+  provider must be an API key.
+
+The allowlist is OpenAI's and there is no way around it from a static page. The app checks
+the current origin before sending, so this surfaces as a specific message in Settings and
+in the chat rather than a generic network failure.
+
+### Why Codex asks you to paste a URL
+
+The Codex OAuth client registers `http://localhost:1455/auth/callback` as its only
+redirect, because the Codex CLI opens a local server on that port to catch it. A web page
+cannot listen on a port, so after you authorize, the browser lands on a page that fails to
+load with the authorization code in its address bar. You copy that address back into the
+app, which verifies the `state` parameter and completes the exchange.
+
+It is unpolished and there is no way around it from a static page — the redirect is fixed
+on OpenAI's side. Two caveats worth knowing: this path is an unofficial contract that can
+break without notice (OpenAI documents API keys for programmatic use), and it identifies
+the app as the Codex CLI. If it ever breaks, switch the provider back to your API key.
+
+### Where credentials live
+
+Encrypted, in `dietea.profiles.ai_vault`. The key is derived from your account password
+with PBKDF2-SHA256 (600k iterations) and the payload is sealed with AES-GCM, all in the
+browser via WebCrypto. The server only ever sees ciphertext.
+
+**What that protects:** the database at rest. A leaked `service_role` key, a backup, or a
+mistaken RLS policy exposes ciphertext rather than a live credential.
+
+**What it does not protect:** this page. At decrypt time the credential is in memory, so
+anything that can run script here already has it.
+
+Because the Supabase session persists and auto-refreshes, your password only exists at the
+moment you type it. Signing in unlocks the vault silently; on a reload the vault stays
+locked until you first use the assistant, which prompts. The derived key — never the
+password — is cached in `sessionStorage` and dies with the tab.
+
+> Change your password from **Settings → Assistant**, not through a Supabase password
+> reset. That flow decrypts with the old password and re-encrypts with the new one. A
+> reset elsewhere leaves the vault sealed under a password that no longer exists, and you
+> will have to re-enter your API key and relink Codex.
+
+### The proposal gate
+
+The agent cannot write. Its only write tool stages a proposal, which appears in chat as a
+card you can **edit in place** — the most common failure is one misread digit off a blurry
+label, and fixing it there beats re-prompting. **Preview** opens a full visualization of
+the result; it renders from the proposal and touches no data, so opening and closing it
+changes nothing. **Accept** applies everything in dependency order: ingredients, then
+meals, then the schedule.
+
+Everything related arrives as one proposal. Importing a recipe that reuses four existing
+ingredients, adds one new one, and schedules the meal is a single decision rather than
+three.
+
+Deleting is where the preview matters most. Because of the dangling-`mealId` behaviour
+described below, removing an ingredient leaves its meals looking fine while silently
+counting zero calories for it — so a delete proposal names every meal it would affect
+before you accept.
+
+Attachments are treated as data, never instructions. Text inside a photographed label
+cannot redirect the agent, and the gate means nothing reaches the database unreviewed
+regardless.
+
 ## Data integrity
 
 Three things worth knowing, all inherited from the original design:
@@ -126,6 +227,11 @@ Supabase URL and publishable key are committed in `js/config.js` and are safe to
 
 Add your Pages domain to **Supabase → Authentication → URL Configuration** so auth
 redirects resolve correctly.
+
+The assistant works in production with an **API key only** — Codex is restricted to
+`localhost:3000` / `localhost:5173` by OpenAI's CORS allowlist, as described above. If you
+use Codex locally, remember to save an API key before relying on the assistant on the
+deployed site.
 
 Exclude `node_modules/`, `scripts/`, and `supabase/` from the deployment if your host
 supports it — they are development-only. Nothing in them is served.

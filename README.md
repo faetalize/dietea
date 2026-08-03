@@ -4,6 +4,11 @@ A single-page vanilla-JS webapp for planning a week of meals: keep a menu of rec
 schedule them across the week against a calorie and macro target, and generate the
 shopping list that falls out of that schedule.
 
+An OpenAI assistant sits behind a floating pill on every tab. It knows your profile,
+targets, schedule and database, reads photos and files, and can change anything — but
+only through a proposal it shows you first, which you can edit, preview in full, and then
+accept or reject. Bring an API key or sign in with a ChatGPT subscription via Codex.
+
 Data lives in Supabase, scoped per user, so your plan and profile follow you to any
 device. The frontend is static — no build step, no server — and deploys as-is to
 Cloudflare Pages or any static host.

@@ -3,6 +3,55 @@
 Historical note, newest first. Records why the app is shaped the way it is, so old
 decisions are not mistaken for current ones.
 
+## The assistant
+
+An OpenAI agent with write access to every domain, gated by a proposal the user approves.
+
+- **Plain `fetch`, no SDK.** Both endpoints accept the SDK's headers, so this was not a
+  compatibility workaround — vendoring another esbuild bundle would have cost the app its
+  no-build-step character for a few dozen lines of saved code.
+- **One write tool, not five.** The docs advise combining functions that are always called
+  sequentially, and importing a recipe is always ingredients-then-meal-then-schedule. Split
+  across tools it becomes three approvals where each only makes sense if the last was
+  accepted; combined it is one decision applied in dependency order.
+- **`store: false` with encrypted reasoning items**, rather than `previous_response_id`.
+  The convenient option would have OpenAI retain a thread containing body weight,
+  composition and eating habits.
+- **The prompt is short on purpose.** GPT-5.6's guidance inverted the GPT-5 advice:
+  scripted preambles, process checklists and worked examples measurably hurt. What remains
+  is goal, boundaries and a completion check. The visible narration moved into the UI's
+  step list instead.
+- **Credentials encrypted client-side** under the account password. This protects the
+  database at rest, not the running page — an honest but real distinction, and the reason
+  the vault unlocks per browser session rather than being cached indefinitely.
+- **Codex turned out to be development-only.** Its backend allowlists three exact origins
+  for CORS — `localhost:3000`, `localhost:5173`, `chatgpt.com` — so a deployed build
+  cannot use it, and neither can `127.0.0.1:3000`. This was only discovered by testing the
+  live endpoint; nothing documents it. It is why the provider layer treats an API key as
+  the default rather than a fallback, and why the origin is checked before a request is
+  built instead of letting CORS produce an unreadable failure.
+- **The Codex wire format came from opencode's plugin, not from guesswork.** Two things
+  were wrong on the first pass: the model was assumed to need a `-codex` suffix (it does
+  not — the canonical `gpt-5.6-*` ids pass through unchanged), and the required
+  `OpenAI-Beta: responses=experimental` header was missing. Both are only discoverable by
+  reading a working implementation.
+
+`getDailyMacroTargets` was extracted into `calories.js` as a prerequisite. It had existed
+as two copies, in `profile.js` and `scheduleEditor.js`; a third for the agent would have
+let it quote targets that disagreed with the wheel on screen. `getCurrentMealSlot` and its
+neighbours moved to `services/scheduleInfo.js` for the same reason — services cannot
+import components.
+
+### What was deliberately not done
+
+- **No preview via the live renderers.** Reusing them would have meant swapping `dataStore`
+  out and back around a render, which risks a half-applied store if anything throws. A
+  separate render path over the same CSS classes costs some duplication and cannot corrupt
+  anything.
+- **Proposals are not persisted.** Reload and a pending one is gone. Staging them in
+  Postgres would survive that, but a proposal is only meaningful against the database state
+  that produced it, and re-asking is cheap.
+
 ## Supabase
 
 Data moved from the browser to Postgres so a plan made on a laptop is visible on a phone.

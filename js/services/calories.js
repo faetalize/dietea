@@ -99,6 +99,76 @@ export function getActivityLevelLabel(level) {
 }
 
 /**
+ * Split a daily calorie target into macro targets.
+ *
+ * The rules: protein is fixed at 1.6 g/kg, fat aims for 0.8 g/kg with a 0.6 g/kg
+ * floor, and carbs absorb whatever calories are left. When protein and the fat
+ * target together exceed the day's calories — which happens on an aggressive
+ * deficit at higher body weights — fat drops toward the floor rather than
+ * letting carbs go negative.
+ *
+ * Kept pure and weight-passed rather than reading `state`, so it stays in the
+ * services layer alongside the BMR math and can be unit-reasoned about.
+ *
+ * This lives here because three callers need identical numbers: the profile
+ * card, the schedule generator, and the AI context. It previously existed as two
+ * separate copies, which meant the agent could have reported targets that
+ * disagreed with the wheel the user was looking at.
+ */
+export function calculateMacroTargets(targetCalories, weightKg) {
+  const weight = Number(weightKg);
+  const safeWeight = Number.isFinite(weight) && weight > 0 ? weight : 75;
+  const calories = Number.isFinite(targetCalories) && targetCalories > 0 ? targetCalories : 2000;
+
+  const proteinG = Math.max(0, Math.round(safeWeight * 1.6));
+  const proteinKcal = proteinG * 4;
+
+  const fatTargetG = Math.max(0, Math.round(safeWeight * 0.8));
+  const fatFloorG = Math.max(0, Math.round(safeWeight * 0.6));
+  const maxFatByRemaining = Math.max(0, Math.floor((calories - proteinKcal) / 9));
+
+  let fatsG = fatTargetG;
+  if (fatsG > maxFatByRemaining) {
+    fatsG = Math.max(Math.min(fatFloorG, maxFatByRemaining), 0);
+  }
+
+  const fatsKcal = fatsG * 9;
+  const carbsKcal = Math.max(0, calories - proteinKcal - fatsKcal);
+  const carbsG = Math.round(carbsKcal / 4);
+
+  // Protein and fat round independently, then carbs take the remainder, so the
+  // three always sum to exactly 100 instead of drifting to 99 or 101.
+  const proteinPct = calories > 0 ? Math.round((proteinKcal / calories) * 100) : 0;
+  const fatsPct = calories > 0 ? Math.round((fatsKcal / calories) * 100) : 0;
+  const carbsPct = Math.max(0, 100 - proteinPct - fatsPct);
+
+  return {
+    calories,
+    weightKg: safeWeight,
+
+    proteinG,
+    proteinKcal,
+    proteinPct,
+    proteinRatio: calories > 0 ? proteinKcal / calories : 0,
+
+    carbsG,
+    carbsKcal,
+    carbsPct,
+    carbsRatio: calories > 0 ? carbsKcal / calories : 0,
+
+    fatsG,
+    fatsKcal,
+    fatsPct,
+    fatsRatio: calories > 0 ? fatsKcal / calories : 0,
+
+    fatTargetG,
+    fatFloorG,
+    fatsMinG: Math.min(fatFloorG, maxFatByRemaining),
+    isFatLimited: fatsG < fatTargetG
+  };
+}
+
+/**
  * Calculate full profile metrics
  */
 export function calculateProfileMetrics(profile) {

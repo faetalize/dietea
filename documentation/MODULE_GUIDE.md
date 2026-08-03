@@ -233,6 +233,41 @@ check.recommendedMonths;   // a timeframe that would be realistic
 recommendedCalories }`, or `null` if any required profile field is missing — always
 null-check it.
 
+`calculateMacroTargets(targetCalories, weightKg)` splits a daily calorie target into
+macros: protein fixed at 1.6 g/kg, fat aiming for 0.8 g/kg with a 0.6 g/kg floor, carbs
+absorbing the remainder. When protein plus the fat target exceed the day's calories, fat
+falls toward its floor rather than letting carbs go negative.
+
+```javascript
+const t = calculateMacroTargets(2180, 82);
+t.proteinG; t.carbsG; t.fatsG;          // grams
+t.proteinKcal; t.proteinPct; t.proteinRatio;
+t.fatsMinG;                             // the floor actually reachable
+t.isFatLimited;                         // true when fat was pushed to the floor
+```
+
+Percentages are computed so the three always sum to exactly 100. Pure and
+weight-passed rather than reading `state`, so it stays usable from any layer.
+
+> Three callers depend on identical numbers here — the profile card, the schedule
+> generator, and the AI session context. This used to exist as two copies, which meant the
+> assistant could quote targets that disagreed with the wheel on screen.
+
+### `js/services/scheduleInfo.js`
+
+Where the user is in their week. Pure derivation over `state` and `dataStore`, no DOM.
+
+```javascript
+import { getScheduleDays, getCurrentDayIndex, getCurrentMealSlot } from '../services/scheduleInfo.js';
+
+getScheduleDays();      // ['Monday', 'Tuesday', ...] rotated to state.startDay
+getCurrentDayIndex();   // index of today in the schedule, or -1
+getCurrentMealSlot();   // 'breakfast' | 'lunch' | 'snack' | 'dinner' | null
+```
+
+Lives in services rather than beside the schedule views because the AI context needs the
+same answers, and services cannot import components.
+
 ### `js/services/storage.js`
 
 Persists each collection to Supabase.
@@ -272,6 +307,146 @@ Two consequences of that design:
 `saveSchedule` is a plain upsert of one row, since the whole plan is a single JSONB
 column. It used to be synchronous; it is now async, so callers that care about failure
 should await it.
+
+## Assistant services
+
+### `js/services/crypto.js`
+
+WebCrypto primitives for the credential vault. PBKDF2-SHA256 at 600k iterations, AES-GCM
+256. Nothing else in the app does cryptography.
+
+```javascript
+const vault = await encryptVault(password, { apiKey: 'sk-…', codex: null });
+// { v: 1, salt, iv, ciphertext } — all base64
+
+const key = await deriveKeyForVault(password, vault);
+await decryptVaultWithKey(vault, key);
+```
+
+AES-GCM authenticates, so a wrong password throws `OperationError` rather than returning
+garbage. Callers use that to tell "wrong password" from "no vault yet".
+
+`encryptVaultWithKey` re-seals under an already-derived key, keeping the salt — that is
+how saving a second credential avoids asking for the password again. Every write gets a
+fresh IV, which GCM requires.
+
+`exportDerivedKey` / `importDerivedKey` serialize the key so it survives a reload inside
+the tab. This is the one place raw key material is exposed; the alternative was caching
+the password, which would also unlock the Supabase account.
+
+### `js/services/credentials.js`
+
+The vault: the OpenAI API key and the Codex tokens, in one encrypted blob.
+
+```javascript
+rememberPassword(password);   // from the sign-in form, before the session loads
+await initVault();            // after loadState(); consumes it. Never throws.
+
+isUnlocked(); needsUnlock(); hasVault();
+getApiKey(); getCodexTokens(); hasCredentialFor('codex');
+
+await setApiKey('sk-…');      // encrypts and flushes
+await changePassword(current, next, updateAuthPassword);
+lock();                       // on sign-out
+```
+
+`needsUnlock()` is the state that matters for UI: credentials exist but this session
+cannot read them, so prompt rather than offering setup.
+
+### `js/services/openai.js`
+
+The only module that talks to a model. One call, two providers.
+
+```javascript
+const response = await streamResponse({ input, tools, instructions, effort, signal, onEvent });
+response.output;   // authoritative items — append verbatim to history
+```
+
+`store: false` always, with `include: ['reasoning.encrypted_content']` so reasoning
+survives tool calls without OpenAI retaining the thread. Plain `fetch`, not the SDK —
+both endpoints accept the SDK's headers, but vendoring another bundle would cost this app
+its no-build-step character.
+
+**The Codex request shape is not obvious and is not documented.** It was derived from
+opencode's plugin (`numman-ali/opencode-openai-codex-auth`), which is the reference
+implementation everyone else follows:
+
+| | |
+| --- | --- |
+| URL | `chatgpt.com/backend-api/codex/responses` (the API's `/responses` with `/codex` spliced in) |
+| `OpenAI-Beta` | `responses=experimental` — **required**; omitting it fails the request |
+| `chatgpt-account-id` | from the `https://api.openai.com/auth` JWT claim |
+| `originator` | `codex_cli_rs` |
+| `session_id` / `conversation_id` | same value, stable per conversation, drives prompt caching |
+| `Accept` | `text/event-stream` |
+
+Model ids are the **same canonical ids as the Platform API** — `gpt-5.6-sol` and friends
+pass straight through. There is no separate "codex" model to substitute; inventing one
+gets `The 'gpt-5.6-codex' model is not supported when using Codex with a ChatGPT account`.
+
+The difference is the context window, and it belongs to the **endpoint, not the model**:
+Codex caps every model at 272k where the API allows 1.05M. Sol, Terra and Luna have
+identical windows as each other on both.
+
+`onEvent` receives `{type: 'text'|'tool-start'|'tool-args'|'thinking'}` for live UI.
+`describeAiError(err)` translates failures; it returns `''` for an abort, since a user
+cancelling is not an error to report.
+
+### `js/services/codexAuth.js`
+
+Codex OAuth, PKCE S256 against `auth.openai.com` with the Codex CLI's public client.
+
+```javascript
+const url = await beginAuthorization();      // open in a new tab
+const tokens = await completeAuthorization(pastedCallbackUrl);
+if (isExpired(tokens)) tokens = await refreshTokens(tokens);
+```
+
+`completeAuthorization` verifies `state` before exchanging, which is what makes the
+paste step safe. `refreshTokens` carries the old refresh token forward when the response
+omits a new one — otherwise a connection dies after its first refresh.
+
+```javascript
+isCodexOriginSupported();        // false anywhere but localhost:3000 / localhost:5173
+describeCodexOriginProblem();    // '' when fine, otherwise what to do about it
+```
+
+The Codex backend sends CORS headers for exactly `http://localhost:3000`,
+`http://localhost:5173` and `https://chatgpt.com` — measured, not documented. Note that
+`http://127.0.0.1:3000` is *not* on it despite being the same server, and neither is any
+deployed domain, so **Codex is a local-development path only**.
+
+`openai.js` calls this before building a request. Letting it through instead produces a
+bare CORS rejection, which arrives as a `TypeError: Failed to fetch` and gets translated
+into "could not reach the server" — true, useless, and pointing at the wrong problem.
+
+### `js/services/aiContext.js`
+
+`buildSessionContext(supplements)` returns the per-turn snapshot as compact text: date and
+current meal slot, profile and macro targets, the week, one line per meal, one line per
+ingredient. Cooking instructions are excluded — `get_meal` fetches those on demand.
+
+### `js/services/agent.js`
+
+Tool definitions and the loop.
+
+```javascript
+await runTurn({ text, attachments, supplements, signal, onEvent, onProposal });
+recordProposalOutcome(proposalId, 'accepted', appliedValues);
+clearConversation();
+```
+
+Three tools: `search_ingredients`, `get_meal`, and `propose_changes` — the single write
+path, covering create, update and delete across every domain in one call.
+
+Two invariants:
+
+- Every output item goes back into history **verbatim, including reasoning items**.
+  Filtering them breaks the model's continuity across tool calls and is rejected outright
+  when `store: false`.
+- `recordProposalOutcome` echoes the **applied** values, not the proposed ones. The user
+  can edit a card before accepting; without this the model's picture of the database
+  drifts.
 
 ## Utils
 
@@ -513,6 +688,69 @@ Destructive buttons use a two-step confirm driven by a `.confirming` class on a
 *Delete all data* removes every row the user owns across all five tables, resets the
 profile, then re-seeds the starter ingredients and menu so the account lands in the same
 state as a fresh sign-up, and reopens onboarding.
+
+### `js/components/chat.js`
+
+The pill, the panel, messages, attachments, and the proposal card.
+
+```javascript
+setupChat({ onApplied });   // once, from main.js
+openChat(); closeChat();
+renderGate();               // re-evaluate after credentials or provider change
+renderProposal(proposal);   // also usable outside a live turn
+```
+
+Tool activity renders as a live step list. GPT-5.6's guidance is against scripting
+preambles into the prompt, so legibility has to come from the UI — a multi-step turn that
+shows nothing between steps reads as frozen.
+
+Model output is escaped before its minimal markdown is applied, so text quoted off a
+photographed label cannot inject markup.
+
+Attachments: images become `input_image`, PDFs `input_file`, and text-ish files are inlined
+as text — sending a `.txt` as a document costs far more than its contents.
+
+### `js/components/proposals.js`
+
+Normalization and application. Import `normalizeProposal` to turn raw tool arguments into
+a flat change list, `applyProposal` to commit one.
+
+```javascript
+{ kind, op: 'create'|'update'|'delete', id, label, before, after, fields, impact }
+```
+
+`applyProposal` runs ingredients → meals → schedule → supplements → profile. That order is
+not cosmetic: a meal referencing a newly created ingredient only resolves once that
+ingredient is in the store. Each collection uses the app's snapshot / swap / roll-back-on-
+false pattern, so a failure leaves the store as it was.
+
+`impact` is the blast radius. Deleting an ingredient lists the meals that would keep
+their line item and count zero calories for it; deleting a meal lists the schedule slots
+that would fall back to "Unassigned meal".
+
+`withScheduleChanges(changes, base)` merges day-level edits into a full seven-day week,
+materializing a blank one first — otherwise scheduling into day 3 of an empty schedule
+would produce a one-element array.
+
+`describeApplied(applied)` is what gets echoed back to the model.
+
+### `js/components/proposalPreview.js`
+
+`openPreview(normalized)` / `closePreview()`. Renders the proposal through the app's own
+CSS classes with `New` / `Updates` / `Removes` badges, showing only fields that actually
+moved.
+
+It never touches `dataStore`. Reusing the live render functions was the obvious
+alternative and is wrong: they write to fixed element ids and read the store directly, so
+driving them would paint into the real DOM or need the store swapped out and back.
+
+Meal totals are computed from the proposal, resolving ingredients created in that same
+proposal — for a new meal there is nothing to look up, and for an edited one the stored
+totals are stale.
+
+### `js/components/dashboard.js`
+
+`renderDashboard()`. A placeholder.
 
 ## Adding a module
 

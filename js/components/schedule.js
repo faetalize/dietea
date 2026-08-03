@@ -4,48 +4,8 @@
  */
 
 import { dataStore, getMealById } from '../core/dataStore.js';
-import { state } from '../services/state.js';
-import { titleCase, defaultTimeForSlot, DAY_NAMES } from '../utils/helpers.js';
-
-/**
- * Get schedule day names based on start day
- */
-export function getScheduleDays() {
-  const days = [];
-  for (let i = 0; i < dataStore.schedule.length; i++) {
-    const dayIndex = (state.startDay + i) % 7;
-    days.push(DAY_NAMES[dayIndex]);
-  }
-  return days;
-}
-
-/**
- * Get current day index in schedule
- */
-export function getCurrentDayIndex() {
-  if (!dataStore.schedule.length) return -1;
-  const today = new Date().getDay();
-  for (let i = 0; i < dataStore.schedule.length; i++) {
-    const scheduleDay = (state.startDay + i) % 7;
-    if (scheduleDay === today) {
-      return i;
-    }
-  }
-  return -1;
-}
-
-/**
- * Get current meal slot based on time of day
- */
-export function getCurrentMealSlot() {
-  const now = new Date();
-  const minutes = now.getHours() * 60 + now.getMinutes();
-  if (minutes >= 300 && minutes < 630) return 'breakfast';
-  if (minutes >= 630 && minutes < 900) return 'lunch';
-  if (minutes >= 900 && minutes < 1080) return 'snack';
-  if (minutes >= 1080 && minutes < 1320) return 'dinner';
-  return null;
-}
+import { getScheduleDays, getCurrentDayIndex, getCurrentMealSlot } from '../services/scheduleInfo.js';
+import { titleCase, defaultTimeForSlot } from '../utils/helpers.js';
 
 /**
  * Scroll to current day in schedule

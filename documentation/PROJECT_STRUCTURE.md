@@ -19,8 +19,15 @@ dietea/
 │   │   ├── supabase.js     # Client construction + error translation
 │   │   ├── auth.js         # Sign in/up/out, session, current user
 │   │   ├── state.js        # Profile + preferences, debounced to Postgres
-│   │   ├── calories.js     # BMR/TDEE/goal math
-│   │   └── storage.js      # Writes for ingredients, meals, schedule
+│   │   ├── calories.js     # BMR/TDEE/goal math + macro targets
+│   │   ├── scheduleInfo.js # Today's index, current meal slot, day names
+│   │   ├── storage.js      # Writes for ingredients, meals, schedule
+│   │   ├── crypto.js       # PBKDF2 + AES-GCM primitives (WebCrypto)
+│   │   ├── credentials.js  # Encrypted credential vault
+│   │   ├── openai.js       # Responses API transport, both providers
+│   │   ├── codexAuth.js    # Codex OAuth (PKCE)
+│   │   ├── aiContext.js    # Session snapshot for the model
+│   │   └── agent.js        # Tools + the tool loop
 │   ├── utils/
 │   │   ├── helpers.js      # Formatting, slugify, day names, slot times
 │   │   └── feedback.js     # Toasts and form validation
@@ -37,7 +44,11 @@ dietea/
 │       ├── ingredients.js    # Ingredient list and CRUD
 │       ├── supplements.js    # Supplement + water tracker
 │       ├── profile.js        # Profile card, macro wheel, edit modal
-│       └── settings.js       # Settings panel wiring
+│       ├── settings.js       # Settings panel wiring, incl. AI settings
+│       ├── chat.js           # Assistant pill, panel, proposal cards
+│       ├── proposals.js      # Proposal normalize + apply
+│       ├── proposalPreview.js# Non-destructive preview overlay
+│       └── dashboard.js      # Empty placeholder tab
 ├── scripts/
 │   └── supabase-entry.js   # Bundle entry point for npm run vendor:supabase
 ├── supabase/
@@ -133,3 +144,33 @@ and passes them into the components that can trigger each kind of change.
 Writes to ingredients and meals are optimistic and reversible: the component swaps in the
 new array, awaits the save, and restores the previous array if the save returns `false`.
 The save functions toast the reason themselves, so callers only have to roll back.
+
+## The assistant
+
+An OpenAI agent that can read everything and write anything — behind one gate.
+
+**Nothing it proposes is applied until the user accepts.** `propose_changes` is the only
+write tool, and it stages rather than saves. The staged proposal renders as an editable
+card in chat, can be visualized in a full preview overlay, and is applied only on accept.
+`js/services/agent.js` is the loop; `js/components/proposals.js` normalizes and applies.
+
+Three things about it are load-bearing:
+
+- **Reasoning items go back into the next request.** The loop pushes every output item —
+  including `reasoning` — into history verbatim. Filtering them out breaks continuity
+  across tool calls and, with `store: false`, is rejected outright.
+- **The preview never mutates `dataStore`.** It is a separate render path over the same
+  CSS classes. Reusing the live render functions would paint into the real DOM or require
+  swapping the store out and back.
+- **What was applied is echoed back to the model**, not what it proposed. The user can
+  edit a card before accepting, and without this the model's picture of the database
+  drifts from reality.
+
+Deletes are where the preview earns its keep. Because meals reference ingredients with no
+foreign key, deleting an ingredient leaves its meals rendering normally while counting
+zero calories for it — so a delete proposal names the meals it will affect before you
+accept, which is the only place in the app that consequence is visible.
+
+Credentials are encrypted client-side (`js/services/crypto.js`) under a key derived from
+the account password, and stored as ciphertext in `dietea.profiles.ai_vault`. See
+[README.md](README.md#the-assistant) for setup and the threat model.
