@@ -9,7 +9,7 @@
  * legibility has to come from here instead.
  */
 
-import { runTurn, recordProposalOutcome, clearConversation } from '../services/agent.js';
+import { runTurn, recordProposalOutcome, clearConversation, deleteConversation } from '../services/agent.js';
 import { describeAiError } from '../services/openai.js';
 import { isUnlocked, needsUnlock, hasCredentialFor, unlockWithPassword } from '../services/credentials.js';
 import { state, updateAiSettings } from '../services/state.js';
@@ -17,6 +17,7 @@ import { getTrackerState } from './supplements.js';
 import { normalizeProposal, applyProposal, describeApplied } from './proposals.js';
 import { openPreview, escapeHtml } from './proposalPreview.js';
 import { showToast } from '../utils/feedback.js';
+import { renderMarkdown } from '../utils/markdown.js';
 
 const TOOL_LABELS = {
   list_ingredients: 'Reading your ingredients',
@@ -45,19 +46,29 @@ const PROPOSAL_KIND_META = {
   shopping: { label: 'Shopping list', icon: 'shopping_cart' }
 };
 
-/** Files staged on the composer, cleared when the turn is sent. */
-let attachments = [];
-/** In-flight turn, so the stop button can cancel it. */
-let controller = null;
 /** Callbacks from main.js for re-rendering after an accepted proposal. */
 let hooks = {};
+let closeAnimationTimer = null;
+let closeAnimationHandler = null;
+const conversations = new Map();
+let activeConversationId = null;
+
+const CHAT_EMPTY_MARKUP = `
+  <div class="chat-intro">
+    <p>Ask about your week, or send a photo of a label or recipe.</p>
+    <p class="chat-intro-note">Anything that changes your data is shown for approval first.</p>
+  </div>`;
 
 function el(id) {
   return document.getElementById(id);
 }
 
-function messagesRoot() {
-  return el('chat-messages');
+function activeConversation() {
+  return conversations.get(activeConversationId) || null;
+}
+
+function messagesRoot(conversationId = activeConversationId) {
+  return conversations.get(conversationId)?.root || null;
 }
 
 /**
@@ -69,23 +80,199 @@ function syncProviderSelect(provider) {
   if (select) select.value = provider;
 }
 
+/* --------------------------------------------------------- conversations */
+
+function titleFromMessage(text, files = []) {
+  const source = String(text || '').trim().replace(/\s+/g, ' ') || files[0]?.name || 'New chat';
+  return source.length > 28 ? `${source.slice(0, 27).trimEnd()}…` : source;
+}
+
+function createConversation({ activate = true } = {}) {
+  const id = crypto.randomUUID();
+  const root = document.createElement('div');
+  root.id = `chat-conversation-${id}`;
+  root.className = 'chat-messages hidden';
+  root.setAttribute('role', 'tabpanel');
+  root.setAttribute('aria-label', 'New chat');
+  root.innerHTML = CHAT_EMPTY_MARKUP;
+  el('chat-conversation-views')?.appendChild(root);
+
+  const conversation = {
+    id,
+    title: 'New chat',
+    root,
+    attachments: [],
+    draft: '',
+    busy: false,
+    controller: null,
+    autoScroll: true,
+    scrollAnimationTimer: null,
+    scrollFrame: null
+  };
+  conversations.set(id, conversation);
+  root.addEventListener('scroll', () => onMessagesScroll(id), { passive: true });
+  renderConversationTabs();
+  if (activate) switchConversation(id);
+  return conversation;
+}
+
+function saveComposerDraft() {
+  const conversation = activeConversation();
+  const input = el('chat-input');
+  if (conversation && input) conversation.draft = input.value;
+}
+
+function switchConversation(conversationId, { focusComposer = true } = {}) {
+  const next = conversations.get(conversationId);
+  if (!next || conversationId === activeConversationId) return;
+
+  saveComposerDraft();
+  activeConversationId = conversationId;
+
+  conversations.forEach((conversation) => {
+    const active = conversation.id === conversationId;
+    conversation.root.classList.toggle('hidden', !active);
+    conversation.root.setAttribute('aria-hidden', String(!active));
+  });
+
+  renderConversationTabs();
+  const input = el('chat-input');
+  if (input) input.value = next.draft;
+  renderAttachments();
+  resizeComposerInput();
+  syncBusyUi();
+  updateComposerState();
+  updateScrollButton();
+  scrollToBottom({ conversationId });
+  if (focusComposer) input?.focus();
+}
+
+function closeConversationTab(conversationId) {
+  const conversation = conversations.get(conversationId);
+  if (!conversation) return;
+
+  conversation.controller?.abort();
+  conversation.root.remove();
+  conversations.delete(conversationId);
+  deleteConversation(conversationId);
+
+  if (!conversations.size) {
+    activeConversationId = null;
+    createConversation();
+    return;
+  }
+
+  if (activeConversationId === conversationId) {
+    activeConversationId = null;
+    switchConversation([...conversations.keys()].at(-1));
+  } else {
+    renderConversationTabs();
+  }
+}
+
+function renderConversationTabs() {
+  const root = el('chat-conversation-tabs');
+  if (!root) return;
+
+  root.replaceChildren();
+  conversations.forEach((conversation) => {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'chat-conversation-tab';
+    wrapper.dataset.conversationId = conversation.id;
+
+    const tab = document.createElement('button');
+    tab.type = 'button';
+    tab.className = 'chat-conversation-select';
+    tab.setAttribute('role', 'tab');
+    tab.setAttribute('aria-selected', String(conversation.id === activeConversationId));
+    tab.setAttribute('aria-controls', conversation.root.id);
+    tab.title = conversation.title;
+    tab.innerHTML = `
+      <span class="chat-conversation-status ${conversation.busy ? 'is-busy' : ''}" aria-hidden="true"></span>
+      <span class="chat-conversation-title"></span>`;
+    tab.querySelector('.chat-conversation-title').textContent = conversation.title;
+    tab.addEventListener('click', () => switchConversation(conversation.id));
+    tab.addEventListener('keydown', onConversationTabKeydown);
+
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'chat-conversation-close';
+    close.setAttribute('aria-label', `Close ${conversation.title}`);
+    close.innerHTML = '<span class="material-symbols-rounded">close</span>';
+    close.addEventListener('click', () => closeConversationTab(conversation.id));
+
+    wrapper.classList.toggle('is-active', conversation.id === activeConversationId);
+    wrapper.append(tab, close);
+    root.appendChild(wrapper);
+  });
+
+  root.querySelector('.chat-conversation-tab.is-active')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+}
+
+function onConversationTabKeydown(event) {
+  if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+  const tabs = [...document.querySelectorAll('.chat-conversation-select')];
+  const current = tabs.indexOf(event.currentTarget);
+  if (current < 0) return;
+
+  event.preventDefault();
+  const nextIndex = event.key === 'Home'
+    ? 0
+    : event.key === 'End'
+      ? tabs.length - 1
+      : (current + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
+  const nextId = tabs[nextIndex]?.closest('[data-conversation-id]')?.dataset.conversationId;
+  switchConversation(nextId, { focusComposer: false });
+  document.querySelector(`.chat-conversation-tab[data-conversation-id="${nextId}"] .chat-conversation-select`)?.focus();
+}
+
 /* ------------------------------------------------------------- open/close */
 
 export function openChat() {
-  el('chat-panel')?.classList.remove('hidden');
+  const panel = el('chat-panel');
+  cancelCloseAnimation(panel);
+  panel?.classList.remove('hidden', 'is-closing');
   el('chat-pill')?.classList.add('is-open');
   renderGate();
+  scrollToBottom({ force: true });
+  resizeComposerInput();
   el('chat-input')?.focus();
 }
 
 export function closeChat() {
-  el('chat-panel')?.classList.add('hidden');
+  const panel = el('chat-panel');
   el('chat-pill')?.classList.remove('is-open');
+  if (!panel || panel.classList.contains('hidden') || panel.classList.contains('is-closing')) return;
+
+  if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+    panel.classList.add('hidden');
+    return;
+  }
+
+  const finish = () => {
+    cancelCloseAnimation(panel);
+    panel.classList.remove('is-closing');
+    panel.classList.add('hidden');
+  };
+
+  closeAnimationHandler = (event) => {
+    if (event.target === panel) finish();
+  };
+  panel.addEventListener('animationend', closeAnimationHandler);
+  panel.classList.add('is-closing');
+  closeAnimationTimer = window.setTimeout(finish, 360);
+}
+
+function cancelCloseAnimation(panel) {
+  if (closeAnimationTimer) window.clearTimeout(closeAnimationTimer);
+  if (panel && closeAnimationHandler) panel.removeEventListener('animationend', closeAnimationHandler);
+  closeAnimationTimer = null;
+  closeAnimationHandler = null;
 }
 
 function toggleChat() {
   const panel = el('chat-panel');
-  if (panel?.classList.contains('hidden')) openChat();
+  if (panel?.classList.contains('hidden') || panel?.classList.contains('is-closing')) openChat();
   else closeChat();
 }
 
@@ -180,55 +367,93 @@ function renderGate() {
 
 /* -------------------------------------------------------------- messages */
 
-function appendMessage(role, html, classes = '') {
-  const root = messagesRoot();
+function appendMessage(role, html, classes = '', conversationId = activeConversationId) {
+  const root = messagesRoot(conversationId);
   if (!root) return null;
 
+  root.querySelector('.chat-intro')?.remove();
   const wrapper = document.createElement('div');
   wrapper.className = `chat-message chat-message-${role} ${classes}`.trim();
   wrapper.innerHTML = html;
   root.appendChild(wrapper);
-  scrollToBottom();
+  scrollToBottom({ conversationId });
   return wrapper;
 }
 
-function scrollToBottom() {
-  const root = messagesRoot();
-  if (root) root.scrollTop = root.scrollHeight;
+function isNearBottom(root, threshold = 48) {
+  if (!root) return true;
+  return root.scrollHeight - root.scrollTop - root.clientHeight <= threshold;
 }
 
-/**
- * Minimal markdown: paragraphs, bullets, bold, and inline code.
- *
- * Escaped first, so model output — which may be quoting a label photographed
- * from who knows where — cannot inject markup into the page.
- */
-function renderMarkdown(text) {
-  const escaped = escapeHtml(text);
+function updateScrollButton() {
+  const conversation = activeConversation();
+  const root = conversation?.root;
+  const button = el('chat-scroll-bottom');
+  if (!conversation || !root || !button) return;
 
-  return escaped
-    .split(/\n{2,}/)
-    .map((block) => {
-      const lines = block.split('\n');
-      if (lines.every((line) => /^\s*[-*]\s+/.test(line))) {
-        const items = lines.map((line) => `<li>${inline(line.replace(/^\s*[-*]\s+/, ''))}</li>`).join('');
-        return `<ul>${items}</ul>`;
-      }
-      return `<p>${inline(lines.join('<br>'))}</p>`;
-    })
-    .join('');
+  const hasOverflow = root.scrollHeight > root.clientHeight + 1;
+  button.classList.toggle('hidden', conversation.autoScroll || !hasOverflow);
 }
 
-function inline(text) {
-  return text
-    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-    .replace(/`([^`]+)`/g, '<code>$1</code>');
+function onMessagesScroll(conversationId) {
+  const conversation = conversations.get(conversationId);
+  const root = conversation?.root;
+  if (!conversation || !root) return;
+
+  if (!conversation.scrollAnimationTimer) conversation.autoScroll = isNearBottom(root);
+  if (conversationId === activeConversationId) updateScrollButton();
+}
+
+function scrollToBottom({ conversationId = activeConversationId, force = false, behavior = 'auto' } = {}) {
+  const conversation = conversations.get(conversationId);
+  const root = conversation?.root;
+  if (!conversation || !root) return;
+
+  if (force) conversation.autoScroll = true;
+  if (!conversation.autoScroll) {
+    if (conversationId === activeConversationId) updateScrollButton();
+    return;
+  }
+
+  if (conversation.scrollFrame) cancelAnimationFrame(conversation.scrollFrame);
+  conversation.scrollFrame = requestAnimationFrame(() => {
+    conversation.scrollFrame = null;
+    if (!force && !conversation.autoScroll) {
+      if (conversationId === activeConversationId) updateScrollButton();
+      return;
+    }
+    root.scrollTo({ top: root.scrollHeight, behavior });
+    if (conversationId === activeConversationId) updateScrollButton();
+  });
+}
+
+function resumeAutoScroll() {
+  const conversation = activeConversation();
+  if (!conversation) return;
+
+  conversation.autoScroll = true;
+  if (conversation.scrollAnimationTimer) window.clearTimeout(conversation.scrollAnimationTimer);
+  conversation.scrollAnimationTimer = window.setTimeout(() => {
+    conversation.scrollAnimationTimer = null;
+    conversation.autoScroll = isNearBottom(conversation.root);
+    updateScrollButton();
+  }, 360);
+  scrollToBottom({ conversationId: conversation.id, force: true, behavior: 'smooth' });
+}
+
+function resetMessages(conversationId = activeConversationId) {
+  const conversation = conversations.get(conversationId);
+  const root = conversation?.root;
+  if (!root) return;
+  root.innerHTML = CHAT_EMPTY_MARKUP;
+  conversation.autoScroll = true;
+  if (conversationId === activeConversationId) updateScrollButton();
 }
 
 /* ----------------------------------------------------------- step traces */
 
-function createTrace() {
-  const wrapper = appendMessage('assistant', '<div class="chat-steps"></div>', 'chat-message-trace');
+function createTrace(conversationId) {
+  const wrapper = appendMessage('assistant', '<div class="chat-steps"></div>', 'chat-message-trace', conversationId);
   const list = wrapper?.querySelector('.chat-steps');
   const toolSteps = new Map();
   const reasoningSteps = new Map();
@@ -247,7 +472,7 @@ function createTrace() {
       </span>`;
     row.querySelector('.chat-step-label').textContent = label;
     list.appendChild(row);
-    scrollToBottom();
+    scrollToBottom({ conversationId });
     return row;
   }
 
@@ -356,7 +581,7 @@ function createTrace() {
       const heading = reasoningHeading(entry.text);
       const label = entry.row?.querySelector('.chat-step-label');
       if (heading && label) label.textContent = heading;
-      scrollToBottom();
+      scrollToBottom({ conversationId });
     },
     reasoningDone(text, reasoningId, summaryIndex = 0) {
       const key = reasoningId || `summary-${summaryIndex}`;
@@ -477,15 +702,15 @@ function summarizeToolArgs(name, rawArgs) {
  * Exported so a proposal can be rendered outside a live turn — re-displaying a
  * past one, or exercising the gate without spending a model call.
  */
-export function renderProposal(proposal) {
+export function renderProposal(proposal, conversationId = activeConversationId) {
   const normalized = normalizeProposal(proposal);
 
   if (!normalized.changes.length) {
-    appendMessage('assistant', '<p class="chat-empty">Nothing to change — everything already matches.</p>');
+    appendMessage('assistant', '<p class="chat-empty">Nothing to change — everything already matches.</p>', '', conversationId);
     return;
   }
 
-  const card = appendMessage('assistant', buildProposalMarkup(normalized), 'chat-message-proposal');
+  const card = appendMessage('assistant', buildProposalMarkup(normalized), 'chat-message-proposal', conversationId);
   if (!card) return;
 
   card.querySelectorAll('[data-field]').forEach((input) => {
@@ -508,14 +733,17 @@ export function renderProposal(proposal) {
   card.querySelector('[data-action="preview"]')?.addEventListener('click', () => openPreview(normalized));
 
   card.querySelector('[data-action="suggest"]')?.addEventListener('click', () => {
+    switchConversation(conversationId);
     const input = el('chat-input');
     if (input) {
       input.value = `About "${normalized.summary}": `;
+      resizeComposerInput();
+      updateComposerState();
       input.focus();
       input.setSelectionRange(input.value.length, input.value.length);
     }
     setDecided(card, 'Asked for changes');
-    recordProposalOutcome(normalized.id, 'rejected', 'They want changes; their message follows.');
+    recordProposalOutcome(conversationId, normalized.id, 'rejected', 'They want changes; their message follows.');
   });
 
   card.querySelector('[data-action="accept"]')?.addEventListener('click', async (event) => {
@@ -532,7 +760,7 @@ export function renderProposal(proposal) {
     }
 
     setDecided(card, 'Applied');
-    recordProposalOutcome(normalized.id, 'accepted', describeApplied(result.applied));
+    recordProposalOutcome(conversationId, normalized.id, 'accepted', describeApplied(result.applied));
     hooks.onApplied?.(result.applied);
     showToast('Changes applied', 'success');
   });
@@ -642,14 +870,17 @@ function readAsDataUrl(file) {
 }
 
 async function addFiles(files) {
+  const conversation = activeConversation();
+  if (!conversation) return;
+
   for (const file of files) {
     try {
       if (IMAGE_TYPES.test(file.type)) {
-        attachments.push({ kind: 'image', name: file.name, dataUrl: await readAsDataUrl(file) });
+        conversation.attachments.push({ kind: 'image', name: file.name, dataUrl: await readAsDataUrl(file) });
       } else if (TEXT_TYPES.test(file.type) || /\.(md|txt|csv|json)$/i.test(file.name)) {
-        attachments.push({ kind: 'text', name: file.name, text: await file.text() });
+        conversation.attachments.push({ kind: 'text', name: file.name, text: await file.text() });
       } else if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name)) {
-        attachments.push({ kind: 'file', name: file.name, dataUrl: await readAsDataUrl(file) });
+        conversation.attachments.push({ kind: 'file', name: file.name, dataUrl: await readAsDataUrl(file) });
       } else {
         showToast(`${file.name} is not a supported attachment`, 'error');
       }
@@ -662,7 +893,9 @@ async function addFiles(files) {
 
 function renderAttachments() {
   const root = el('chat-attachments');
+  const conversation = activeConversation();
   if (!root) return;
+  const attachments = conversation?.attachments || [];
 
   root.classList.toggle('hidden', !attachments.length);
   root.innerHTML = attachments
@@ -680,52 +913,99 @@ function renderAttachments() {
 
   root.querySelectorAll('[data-remove]').forEach((button) => {
     button.addEventListener('click', () => {
-      attachments.splice(Number(button.dataset.remove), 1);
+      conversation?.attachments.splice(Number(button.dataset.remove), 1);
       renderAttachments();
     });
   });
+
+  updateComposerState();
 }
 
 /* ------------------------------------------------------------------ send */
 
-function setBusy(busy) {
+function resizeComposerInput() {
+  const input = el('chat-input');
+  if (!input) return;
+
+  input.style.height = '0px';
+  const maxHeight = 160;
+  const nextHeight = Math.min(input.scrollHeight, maxHeight);
+  input.style.height = `${nextHeight}px`;
+  input.style.overflowY = input.scrollHeight > maxHeight ? 'auto' : 'hidden';
+}
+
+function updateComposerState() {
+  const input = el('chat-input');
+  const sendButton = el('chat-send');
+  const conversation = activeConversation();
+  const hasContent = !!input?.value.trim() || (conversation?.attachments.length || 0) > 0;
+  if (sendButton) sendButton.disabled = !!conversation?.busy || !hasContent;
+}
+
+function syncBusyUi() {
+  const busy = !!activeConversation()?.busy;
   el('chat-send')?.classList.toggle('hidden', busy);
   el('chat-stop')?.classList.toggle('hidden', !busy);
+  el('chat-composer')?.classList.toggle('is-busy', busy);
+  const attach = el('chat-attach');
+  if (attach) attach.disabled = busy;
   const input = el('chat-input');
   if (input) input.disabled = busy;
+  updateComposerState();
+}
+
+function setBusy(conversationId, busy) {
+  const conversation = conversations.get(conversationId);
+  if (!conversation) return;
+  conversation.busy = busy;
+  renderConversationTabs();
+  if (conversationId === activeConversationId) syncBusyUi();
 }
 
 async function send() {
+  const conversation = activeConversation();
   const input = el('chat-input');
   const text = (input?.value || '').trim();
-  if (!text && !attachments.length) return;
+  if (!conversation || conversation.busy || (!text && !conversation.attachments.length)) return;
 
-  const sent = attachments;
-  attachments = [];
+  const conversationId = conversation.id;
+  const sent = conversation.attachments;
+  conversation.attachments = [];
+  conversation.draft = '';
+  if (conversation.title === 'New chat') {
+    conversation.title = titleFromMessage(text, sent);
+    conversation.root.setAttribute('aria-label', conversation.title);
+    renderConversationTabs();
+  }
+  resumeAutoScroll();
 
   appendMessage(
     'user',
     `${sent.length ? `<div class="chat-message-files">${sent.map((f) => escapeHtml(f.name)).join(', ')}</div>` : ''}
-     <p>${escapeHtml(text)}</p>`
+     <p>${escapeHtml(text)}</p>`,
+    '',
+    conversationId
   );
 
   if (input) input.value = '';
+  resizeComposerInput();
   renderAttachments();
-  setBusy(true);
+  setBusy(conversationId, true);
 
-  controller = new AbortController();
-  const trace = createTrace();
+  conversation.controller = new AbortController();
+  const trace = createTrace(conversationId);
 
   let bubble = null;
   let streamed = '';
 
   try {
     const result = await runTurn({
+      conversationId,
       text,
       attachments: sent,
       getSupplements: getTrackerState,
-      signal: controller.signal,
-      onProposal: renderProposal,
+      signal: conversation.controller.signal,
+      onProposal: (proposal) => renderProposal(proposal, conversationId),
       onEvent: (event) => {
         if (event.type === 'turn-start' || event.type === 'status') {
           trace.status(event.label || 'Waiting for response');
@@ -744,9 +1024,9 @@ async function send() {
         } else if (event.type === 'text') {
           trace.textStarted();
           streamed += event.delta;
-          if (!bubble) bubble = appendMessage('assistant', '');
+          if (!bubble) bubble = appendMessage('assistant', '', '', conversationId);
           if (bubble) bubble.innerHTML = renderMarkdown(streamed);
-          scrollToBottom();
+          scrollToBottom({ conversationId });
         }
       }
     });
@@ -755,21 +1035,24 @@ async function send() {
 
     // A turn that ends in a proposal often has no prose at all, which is fine.
     if (!streamed && result.text) {
-      appendMessage('assistant', renderMarkdown(result.text));
+      appendMessage('assistant', renderMarkdown(result.text), '', conversationId);
     }
     const contradictsVisibleText =
       streamed && result.error === 'The model completed without returning a message. Please try again.';
     if (result.error && !contradictsVisibleText) {
-      appendMessage('assistant', `<p class="chat-error">${escapeHtml(result.error)}</p>`);
+      appendMessage('assistant', `<p class="chat-error">${escapeHtml(result.error)}</p>`, '', conversationId);
     }
   } catch (err) {
     trace.complete();
     const message = describeAiError(err);
-    if (message) appendMessage('assistant', `<p class="chat-error">${escapeHtml(message)}</p>`);
+    if (message) appendMessage('assistant', `<p class="chat-error">${escapeHtml(message)}</p>`, '', conversationId);
   } finally {
-    controller = null;
-    setBusy(false);
-    input?.focus();
+    conversation.controller = null;
+    setBusy(conversationId, false);
+    if (conversationId === activeConversationId) {
+      resizeComposerInput();
+      input?.focus();
+    }
   }
 }
 
@@ -783,17 +1066,34 @@ export function setupChat(callbacks = {}) {
   el('chat-send')?.addEventListener('click', send);
 
   el('chat-stop')?.addEventListener('click', () => {
-    controller?.abort();
+    activeConversation()?.controller?.abort();
   });
 
   el('chat-clear')?.addEventListener('click', () => {
-    clearConversation();
-    const root = messagesRoot();
-    if (root) root.innerHTML = '';
+    const conversation = activeConversation();
+    if (!conversation) return;
+    conversation.controller?.abort();
+    conversation.attachments = [];
+    conversation.draft = '';
+    conversation.title = 'New chat';
+    conversation.root.setAttribute('aria-label', conversation.title);
+    clearConversation(conversation.id);
+    resetMessages(conversation.id);
+    renderConversationTabs();
+    renderAttachments();
     showToast('Conversation cleared', 'default');
   });
 
+  el('chat-new-conversation')?.addEventListener('click', () => createConversation());
+
   const input = el('chat-input');
+
+  input?.addEventListener('input', () => {
+    const conversation = activeConversation();
+    if (conversation) conversation.draft = input.value;
+    resizeComposerInput();
+    updateComposerState();
+  });
 
   // Enter sends, Shift+Enter breaks the line — the convention everywhere else.
   input?.addEventListener('keydown', (event) => {
@@ -812,6 +1112,7 @@ export function setupChat(callbacks = {}) {
   });
 
   const panel = el('chat-panel');
+  el('chat-scroll-bottom')?.addEventListener('click', resumeAutoScroll);
 
   panel?.addEventListener('dragover', (event) => {
     event.preventDefault();
@@ -830,6 +1131,9 @@ export function setupChat(callbacks = {}) {
     event.target.value = '';
   });
 
+  createConversation();
+  resizeComposerInput();
+  updateComposerState();
   renderGate();
 }
 

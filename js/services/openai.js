@@ -26,17 +26,9 @@ import { isExpired, refreshTokens, isCodexOriginSupported, describeCodexOriginPr
 const API_URL = 'https://api.openai.com/v1/responses';
 const CODEX_URL = 'https://chatgpt.com/backend-api/codex/responses';
 
-/**
- * Identifies this chat to the Codex backend for prompt caching. Regenerated
- * when the conversation is cleared, since a fresh chat shares no prefix with
- * the old one.
- */
-let conversationId = crypto.randomUUID();
+/** Used only by callers that do not supply a conversation-specific cache id. */
+const fallbackConversationId = crypto.randomUUID();
 let streamSequence = 0;
-
-export function resetConversationId() {
-  conversationId = crypto.randomUUID();
-}
 
 export const MODELS = [
   { id: 'gpt-5.6-sol', label: 'Sol — most capable', hint: 'Best at messy photos and multi-step planning.' },
@@ -95,7 +87,7 @@ export function describeAiError(error) {
  * Resolve credentials and endpoint for the active provider, refreshing the
  * Codex token when it is close enough to expiry to die mid-request.
  */
-async function resolveProvider() {
+async function resolveProvider(conversationId) {
   if (!isUnlocked()) {
     throw new Error('Unlock your credentials to use the assistant.');
   }
@@ -135,8 +127,8 @@ async function resolveProvider() {
         originator: 'codex_cli_rs',
         // Stable per conversation, which is what lets the backend reuse a
         // prompt cache across the turns of one chat.
-        session_id: conversationId,
-        conversation_id: conversationId
+        session_id: conversationId || fallbackConversationId,
+        conversation_id: conversationId || fallbackConversationId
       }
     };
   }
@@ -170,12 +162,13 @@ export async function streamResponse({
   tools,
   instructions,
   effort,
+  conversationId,
   signal,
   onEvent,
   toolChoice = 'auto',
   parallelToolCalls = false
 }) {
-  const provider = await resolveProvider();
+  const provider = await resolveProvider(conversationId);
 
   const body = {
     model: provider.model,

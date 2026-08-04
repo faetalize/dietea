@@ -646,28 +646,42 @@
             </div>
         </header>
 
-        <div id="chat-messages" class="chat-messages">
-            <div class="chat-intro">
-                <p>Ask about your week, or send a photo of a label or recipe.</p>
-                <p class="chat-intro-note">Anything that changes your data is shown for approval first.</p>
-            </div>
+        <nav class="chat-conversations" aria-label="Assistant conversations">
+            <div id="chat-conversation-tabs" class="chat-conversation-tabs" role="tablist"></div>
+            <button id="chat-new-conversation" class="chat-new-conversation" type="button"
+                    aria-label="New conversation" title="New conversation">
+                <span class="material-symbols-rounded">add</span>
+            </button>
+        </nav>
+
+        <div class="chat-feed">
+            <div id="chat-conversation-views" class="chat-conversation-views"></div>
+            <button id="chat-scroll-bottom" class="chat-scroll-bottom hidden" type="button"
+                    aria-label="Scroll to latest message">
+                <span class="material-symbols-rounded">arrow_downward</span>
+                <span>Latest</span>
+            </button>
         </div>
 
         <div id="chat-gate" class="chat-gate hidden"></div>
 
         <div id="chat-composer" class="chat-composer">
-            <div id="chat-attachments" class="chat-attachments hidden"></div>
-            <div class="chat-input-row">
-                <button id="chat-attach" class="btn-icon" aria-label="Attach a file">
-                    <span class="material-symbols-rounded">attach_file</span>
-                </button>
-                <textarea id="chat-input" rows="1" placeholder="Ask anything…"></textarea>
-                <button id="chat-send" class="btn-icon chat-send" aria-label="Send">
-                    <span class="material-symbols-rounded">arrow_upward</span>
-                </button>
-                <button id="chat-stop" class="btn-icon chat-stop hidden" aria-label="Stop">
-                    <span class="material-symbols-rounded">stop</span>
-                </button>
+            <div class="chat-composer-shell">
+                <div id="chat-attachments" class="chat-attachments hidden"></div>
+                <textarea id="chat-input" rows="1" placeholder="Ask anything…"
+                          aria-describedby="chat-input-hint"></textarea>
+                <div class="chat-composer-actions">
+                    <button id="chat-attach" class="chat-composer-control" type="button" aria-label="Attach a file">
+                        <span class="material-symbols-rounded">attach_file</span>
+                    </button>
+                    <span id="chat-input-hint" class="chat-input-hint">Enter to send · Shift+Enter for a new line</span>
+                    <button id="chat-send" class="chat-composer-control chat-send" type="button" aria-label="Send" disabled>
+                        <span class="material-symbols-rounded">arrow_upward</span>
+                    </button>
+                    <button id="chat-stop" class="chat-composer-control chat-stop hidden" type="button" aria-label="Stop generating">
+                        <span class="material-symbols-rounded">stop</span>
+                    </button>
+                </div>
             </div>
             <input type="file" id="chat-file" accept="image/*,.pdf,.txt,.md,.csv,.json" multiple hidden>
         </div>

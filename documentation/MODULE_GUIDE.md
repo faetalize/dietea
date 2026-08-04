@@ -359,7 +359,7 @@ The only module that talks to a model. One call, two providers.
 
 ```javascript
 const response = await streamResponse({
-  input, tools, instructions, effort, signal, onEvent,
+  input, tools, instructions, effort, conversationId, signal, onEvent,
   toolChoice: 'auto', parallelToolCalls: true
 });
 response.output;   // authoritative items — append verbatim to history
@@ -470,9 +470,9 @@ meal together.
 Tool definitions and the loop.
 
 ```javascript
-await runTurn({ text, attachments, getSupplements, signal, onEvent, onProposal });
-recordProposalOutcome(proposalId, 'accepted', appliedValues);
-clearConversation();
+await runTurn({ conversationId, text, attachments, getSupplements, signal, onEvent, onProposal });
+recordProposalOutcome(conversationId, proposalId, 'accepted', appliedValues);
+clearConversation(conversationId);
 ```
 
 There is no lexical intent classifier and the host never forces tool use from words in the
@@ -756,8 +756,25 @@ or a model-authored reasoning-summary row with expandable detail when a summary 
 available. Tool calls show their start, safe argument summary, and completion result. Raw
 chain-of-thought is never shown.
 
-Model output is escaped before its minimal markdown is applied, so text quoted off a
-photographed label cannot inject markup.
+The tab strip holds independent conversations. Each tab has its own DOM timeline, model
+history, staged proposals, Codex prompt-cache id, draft, attachments, scroll intent, and
+in-flight request. Switching tabs therefore cannot send a response or proposal outcome to
+the wrong model context. The first user message supplies the tab title; the plus button
+starts another conversation and closing a tab aborts only that tab's active request.
+
+Message output uses the vendored Marked renderer in `js/utils/markdown.js`, with GFM
+headings, mixed ordered/unordered lists, tables, blockquotes, fenced code, links, and the
+rest of the common syntax. List marker styles are explicitly restored after the global CSS
+reset. Raw HTML is rendered as text, unsafe URL schemes are not made
+clickable, and remote Markdown images become labelled links instead of automatic loads.
+
+Scrolling is intent-aware. New content stays pinned only while the viewport is already
+near its end. Scrolling upward disables the pin and reveals the floating Latest button;
+returning to the bottom enables it again.
+
+The composer is one focusable shell around an autosizing, non-resizable textarea and its
+embedded attachment/send/stop controls. On mobile the panel opens and closes as a bottom
+sheet, with reduced-motion preferences respected.
 
 Attachments: images become `input_image`, PDFs `input_file`, and text-ish files are inlined
 as text — sending a `.txt` as a document costs far more than its contents.

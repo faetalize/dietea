@@ -9,7 +9,7 @@
  */
 
 import { state } from './state.js';
-import { streamResponse, resetConversationId } from './openai.js';
+import { streamResponse } from './openai.js';
 import { buildRuntimeContext } from './aiContext.js';
 import {
   AI_TOOLS,
@@ -37,27 +37,41 @@ export const TOOLS = AI_TOOLS;
 
 /* ------------------------------------------------- conversation + loop */
 
-/** Response items in API shape. Reset only when the user clears the chat. */
-let history = [];
-/** Proposals staged this session, by id, so decisions can be matched back. */
-const staged = new Map();
-let proposalCounter = 0;
+/** Independent model state keyed by the UI conversation tab id. */
+const conversations = new Map();
 
-export function getHistory() {
-  return history;
+function getConversation(conversationId) {
+  const id = conversationId || 'default';
+  let conversation = conversations.get(id);
+  if (!conversation) {
+    conversation = {
+      history: [],
+      staged: new Map(),
+      proposalCounter: 0,
+      transportId: crypto.randomUUID()
+    };
+    conversations.set(id, conversation);
+  }
+  return conversation;
 }
 
-export function clearConversation() {
-  history = [];
-  staged.clear();
-  resetConversationId();
+export function getHistory(conversationId) {
+  return getConversation(conversationId).history;
 }
 
-function stageProposal(raw, onProposal) {
-  const id = `proposal-${++proposalCounter}`;
+export function clearConversation(conversationId) {
+  conversations.delete(conversationId || 'default');
+}
+
+export function deleteConversation(conversationId) {
+  conversations.delete(conversationId || 'default');
+}
+
+function stageProposal(conversation, raw, onProposal) {
+  const id = `proposal-${++conversation.proposalCounter}`;
   const proposal = { id, summary: raw.summary || 'Proposed changes', raw };
 
-  staged.set(id, proposal);
+  conversation.staged.set(id, proposal);
   onProposal?.(proposal);
 
   return {
@@ -68,7 +82,8 @@ function stageProposal(raw, onProposal) {
 }
 
 /** Tell the model what actually happened after the user reviewed a proposal. */
-export function recordProposalOutcome(proposalId, outcome, detail) {
+export function recordProposalOutcome(conversationId, proposalId, outcome, detail) {
+  const conversation = getConversation(conversationId);
   const text =
     outcome === 'accepted'
       ? `The user accepted proposal ${proposalId}. Applied exactly this:\n${JSON.stringify(detail, null, 2)}`
@@ -76,8 +91,8 @@ export function recordProposalOutcome(proposalId, outcome, detail) {
         ? `The user rejected proposal ${proposalId}.${detail ? ` They said: ${detail}` : ''}`
         : `Proposal ${proposalId} was dismissed without a decision.`;
 
-  history.push({ role: 'user', content: [{ type: 'input_text', text }] });
-  staged.delete(proposalId);
+  conversation.history.push({ role: 'user', content: [{ type: 'input_text', text }] });
+  conversation.staged.delete(proposalId);
 }
 
 function buildUserContent(text, attachments = []) {
@@ -107,7 +122,7 @@ function collectText(output) {
     .trim();
 }
 
-function recordToolOutput(call, result, onEvent) {
+function recordToolOutput(history, call, result, onEvent) {
   history.push({
     type: 'function_call_output',
     call_id: call.call_id,
@@ -117,7 +132,9 @@ function recordToolOutput(call, result, onEvent) {
 }
 
 /** Run one user turn until the model answers, proposes, or the user aborts. */
-export async function runTurn({ text, attachments, getSupplements, signal, onEvent, onProposal }) {
+export async function runTurn({ conversationId, text, attachments, getSupplements, signal, onEvent, onProposal }) {
+  const conversation = getConversation(conversationId);
+  const { history } = conversation;
   history.push({ role: 'user', content: buildUserContent(text, attachments) });
 
   const instructions = `${INSTRUCTIONS}\n\n--- Runtime ---\n${buildRuntimeContext()}`;
@@ -131,6 +148,7 @@ export async function runTurn({ text, attachments, getSupplements, signal, onEve
       tools: TOOLS,
       instructions,
       effort,
+      conversationId: conversation.transportId,
       signal,
       onEvent,
       toolChoice: 'auto',
@@ -175,7 +193,7 @@ export async function runTurn({ text, attachments, getSupplements, signal, onEve
     let stagedResult = null;
     if (proposalCalls.length) {
       const raw = mergeProposalPayloads(proposalCalls.map((entry) => entry.payload));
-      stagedResult = stageProposal(raw, onProposal);
+      stagedResult = stageProposal(conversation, raw, onProposal);
       for (const { call } of proposalCalls) {
         results.set(call.call_id, {
           ...stagedResult,
@@ -187,7 +205,7 @@ export async function runTurn({ text, attachments, getSupplements, signal, onEve
     // Function outputs follow the model's call order even when independent
     // reads were executed together or focused proposals were aggregated.
     for (const call of calls) {
-      recordToolOutput(call, results.get(call.call_id) || { error: 'Tool produced no result.' }, onEvent);
+      recordToolOutput(history, call, results.get(call.call_id) || { error: 'Tool produced no result.' }, onEvent);
     }
 
     if (stagedResult) return { text: '', proposal: true };

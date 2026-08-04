@@ -32,8 +32,10 @@ dietea/
 │   │   └── agent.js        # Model-driven tool loop + proposal staging
 │   ├── utils/
 │   │   ├── helpers.js      # Formatting, slugify, day names, slot times
-│   │   └── feedback.js     # Toasts and form validation
+│   │   ├── feedback.js     # Toasts and form validation
+│   │   └── markdown.js     # Safe GFM rendering for assistant messages
 │   ├── vendor/
+│   │   ├── markdown.js     # Vendored Marked bundle (generated, committed)
 │   │   └── supabase.js     # Vendored supabase-js bundle (generated, committed)
 │   └── components/
 │       ├── navigation.js     # Tab switching, meal detail show/hide
@@ -52,6 +54,7 @@ dietea/
 │       ├── proposalPreview.js# Non-destructive preview overlay
 │       └── dashboard.js      # Empty placeholder tab
 ├── scripts/
+│   ├── markdown-entry.js   # Bundle entry point for npm run vendor:markdown
 │   └── supabase-entry.js   # Bundle entry point for npm run vendor:supabase
 ├── supabase/
 │   └── migrations/         # Schema history, mirrors the remote migration table
