@@ -19,9 +19,30 @@ import { openPreview, escapeHtml } from './proposalPreview.js';
 import { showToast } from '../utils/feedback.js';
 
 const TOOL_LABELS = {
-  search_ingredients: 'Searching your ingredients',
+  list_ingredients: 'Reading your ingredients',
+  get_ingredient: 'Reading an ingredient',
+  list_meals: 'Reading your meals',
   get_meal: 'Reading a recipe',
-  propose_changes: 'Drafting changes'
+  get_schedule: 'Reading your schedule',
+  get_profile: 'Reading your profile',
+  get_supplements: "Reading today's tracking",
+  get_shopping_list: 'Building your shopping list',
+  propose_ingredient_changes: 'Preparing ingredient changes',
+  propose_meal_changes: 'Preparing meal changes',
+  propose_schedule_changes: 'Preparing schedule changes',
+  propose_supplement_changes: 'Preparing tracking changes',
+  propose_profile_changes: 'Preparing profile changes',
+  propose_shopping_changes: 'Preparing shopping changes',
+  propose_changes: 'Preparing combined changes'
+};
+
+const PROPOSAL_KIND_META = {
+  ingredient: { label: 'Ingredients', icon: 'nutrition' },
+  meal: { label: 'Meals', icon: 'restaurant_menu' },
+  schedule: { label: 'Schedule', icon: 'calendar_month' },
+  supplements: { label: 'Today’s tracking', icon: 'medication' },
+  profile: { label: 'Profile & goals', icon: 'person' },
+  shopping: { label: 'Shopping list', icon: 'shopping_cart' }
 };
 
 /** Files staged on the composer, cleared when the turn is sent. */
@@ -209,37 +230,186 @@ function inline(text) {
 function createTrace() {
   const wrapper = appendMessage('assistant', '<div class="chat-steps"></div>', 'chat-message-trace');
   const list = wrapper?.querySelector('.chat-steps');
-  const steps = new Map();
+  const toolSteps = new Map();
+  const reasoningSteps = new Map();
+  let statusRow = null;
+  let statusKind = null;
+  let hasWork = false;
+
+  function createRow(label, className = '') {
+    if (!list) return null;
+    const row = document.createElement('div');
+    row.className = `chat-step is-running ${className}`.trim();
+    row.innerHTML = `
+      <span class="chat-step-spinner"></span>
+      <span class="chat-step-copy">
+        <span class="chat-step-label"></span>
+      </span>`;
+    row.querySelector('.chat-step-label').textContent = label;
+    list.appendChild(row);
+    scrollToBottom();
+    return row;
+  }
+
+  function finishRow(row, icon = 'check') {
+    if (!row || row.classList.contains('is-done')) return;
+    row.classList.remove('is-running');
+    row.classList.add('is-done');
+    row.querySelector('.chat-step-spinner')?.replaceWith(iconNode(icon));
+  }
+
+  function setToolDetail(row) {
+    const copy = row?.querySelector('.chat-step-copy');
+    if (!copy) return;
+
+    let detail = copy.querySelector('.chat-step-detail');
+    const text = [row.dataset.args, row.dataset.result].filter(Boolean).join(' · ');
+    if (!text) {
+      detail?.remove();
+      return;
+    }
+
+    if (!detail) {
+      detail = document.createElement('span');
+      detail.className = 'chat-step-detail';
+      copy.appendChild(detail);
+    }
+    detail.textContent = text;
+  }
+
+  function finishReasoning(index, finalText) {
+    const entry = reasoningSteps.get(index);
+    if (!entry) return;
+    if (finalText) entry.text = finalText;
+
+    const heading = reasoningHeading(entry.text);
+    if (heading) entry.row.querySelector('.chat-step-label').textContent = heading;
+    finishRow(entry.row, 'psychology');
+
+    const detailText = reasoningDetail(entry.text, heading);
+    const copy = entry.row.querySelector('.chat-step-copy');
+    if (detailText && copy && !copy.querySelector('.chat-reasoning-details')) {
+      const details = document.createElement('details');
+      details.className = 'chat-reasoning-details';
+      const summary = document.createElement('summary');
+      summary.textContent = 'Work summary';
+      const content = document.createElement('div');
+      content.className = 'chat-reasoning-text';
+      content.textContent = detailText;
+      details.append(summary, content);
+      copy.appendChild(details);
+    }
+  }
+
+  function settleStatus() {
+    if (!statusRow) return;
+
+    if (statusKind === 'reasoning') {
+      const label = statusRow.querySelector('.chat-step-label');
+      if (label?.textContent === 'Thinking') label.textContent = 'Reasoned';
+      finishRow(statusRow, 'psychology');
+      hasWork = true;
+    } else {
+      statusRow.remove();
+    }
+
+    statusRow = null;
+    statusKind = null;
+  }
 
   return {
-    start(callId, name) {
+    status(label, kind = 'activity') {
       if (!list) return;
-      const row = document.createElement('div');
-      row.className = 'chat-step is-running';
-      row.innerHTML = `
-        <span class="chat-step-spinner"></span>
-        <span class="chat-step-label">${escapeHtml(TOOL_LABELS[name] || name)}</span>`;
-      list.appendChild(row);
-      steps.set(callId, row);
+      if (!statusRow) statusRow = createRow(label, 'chat-step-status');
+      else statusRow.querySelector('.chat-step-label').textContent = label;
+      statusKind = kind;
+    },
+    thinking() {
+      if (!list) return;
+      hasWork = true;
+      if (!statusRow) statusRow = createRow('Thinking', 'chat-step-reasoning');
+      else statusRow.querySelector('.chat-step-label').textContent = 'Thinking';
+      statusRow.classList.add('chat-step-reasoning');
+      statusKind = 'reasoning';
+    },
+    textStarted() {
+      // Text streaming is its own visible progress signal. Remove a generic
+      // request spinner, or complete a real reasoning item if one preceded it.
+      settleStatus();
+    },
+    reasoning(delta, reasoningId, summaryIndex = 0) {
+      if (!delta || !list) return;
+      hasWork = true;
+      const key = reasoningId || `summary-${summaryIndex}`;
+
+      let entry = reasoningSteps.get(key);
+      if (!entry) {
+        const row = statusRow || createRow('Thinking', 'chat-step-reasoning');
+        statusRow = null;
+        statusKind = null;
+        row?.classList.add('chat-step-reasoning');
+        entry = { row, text: '' };
+        reasoningSteps.set(key, entry);
+      }
+
+      entry.text += delta;
+      const heading = reasoningHeading(entry.text);
+      const label = entry.row?.querySelector('.chat-step-label');
+      if (heading && label) label.textContent = heading;
       scrollToBottom();
     },
-    finish(callId, detail) {
-      const row = steps.get(callId);
-      if (!row) return;
-      row.classList.remove('is-running');
-      row.classList.add('is-done');
-      row.querySelector('.chat-step-spinner')?.replaceWith(iconNode('check'));
-      if (detail) {
-        const note = document.createElement('span');
-        note.className = 'chat-step-detail';
-        note.textContent = detail;
-        row.appendChild(note);
-      }
+    reasoningDone(text, reasoningId, summaryIndex = 0) {
+      const key = reasoningId || `summary-${summaryIndex}`;
+      if (!reasoningSteps.has(key) && text) this.reasoning(text, reasoningId, summaryIndex);
+      finishReasoning(key, text);
     },
-    remove() {
-      if (list && !list.children.length) wrapper?.remove();
+    start(callId, name) {
+      if (!list) return;
+      if (toolSteps.has(callId)) return;
+      hasWork = true;
+      settleStatus();
+      reasoningSteps.forEach((_, index) => finishReasoning(index));
+      const row = createRow(TOOL_LABELS[name] || name, 'chat-step-tool');
+      toolSteps.set(callId, row);
+    },
+    args(callId, name, rawArgs) {
+      this.start(callId, name);
+      const row = toolSteps.get(callId);
+      if (!row) return;
+      row.dataset.args = summarizeToolArgs(name, rawArgs);
+      setToolDetail(row);
+    },
+    finish(callId, detail) {
+      const row = toolSteps.get(callId);
+      if (!row) return;
+      row.dataset.result = detail || '';
+      setToolDetail(row);
+      finishRow(row);
+    },
+    complete() {
+      reasoningSteps.forEach((_, index) => finishReasoning(index));
+      settleStatus();
+      if (!hasWork) wrapper?.remove();
     }
   };
+}
+
+function reasoningHeading(text) {
+  const value = String(text || '');
+  const bold = value.match(/\*\*([^*]+)\*\*/)?.[1]?.trim();
+  const firstLine = value
+    .split('\n')
+    .map((line) => line.replace(/^#+\s*/, '').replace(/^\*\*|\*\*$/g, '').trim())
+    .find(Boolean);
+  const heading = bold || firstLine || '';
+  return heading.length > 90 ? `${heading.slice(0, 87)}…` : heading;
+}
+
+function reasoningDetail(text, heading) {
+  const value = String(text || '')
+    .replace(/^\s*\*\*[^*]+\*\*\s*/, '')
+    .trim();
+  return value && value !== heading ? value : '';
 }
 
 function iconNode(name) {
@@ -251,11 +421,46 @@ function iconNode(name) {
 
 function summarizeToolResult(name, result) {
   if (!result) return '';
-  if (name === 'search_ingredients') {
-    const count = result.matches?.length || 0;
-    return count ? `${count} match${count === 1 ? '' : 'es'}` : 'no matches';
+  if (result.error) return result.error;
+  if (name === 'list_ingredients' || name === 'list_meals') {
+    const count = result.results?.length || 0;
+    const total = result.total || 0;
+    return total ? `${count} of ${total}` : 'none found';
   }
+  if (name === 'get_ingredient') return result.name || '';
   if (name === 'get_meal') return result.name || '';
+  if (name === 'get_schedule') {
+    const count = result.days?.length || 0;
+    return count ? `${count} day${count === 1 ? '' : 's'}` : 'empty';
+  }
+  if (name === 'get_profile') return result.isComplete ? 'profile loaded' : 'not set up';
+  if (name === 'get_supplements') {
+    const total = result.supplements?.length || 0;
+    return `${result.completedCount || 0} of ${total} taken`;
+  }
+  if (name === 'get_shopping_list') {
+    const count = result.categories?.length || 0;
+    return count ? `${count} categor${count === 1 ? 'y' : 'ies'}` : 'empty';
+  }
+  if (name.startsWith('propose_')) return result.status === 'staged' ? 'ready for review' : '';
+  return '';
+}
+
+function summarizeToolArgs(name, rawArgs) {
+  let args = {};
+  try {
+    args = rawArgs ? JSON.parse(rawArgs) : {};
+  } catch {
+    return '';
+  }
+
+  if (name === 'list_ingredients' || name === 'list_meals') {
+    return args.query ? `“${args.query}”` : args.type || args.category || 'all';
+  }
+  if (name === 'get_ingredient') return args.ingredientId || '';
+  if (name === 'get_meal') return args.mealId || '';
+  if (name === 'get_schedule') return args.day === null ? 'full week' : `day ${Number(args.day) + 1}`;
+  if (name.startsWith('propose_')) return args.summary || '';
   return '';
 }
 
@@ -290,7 +495,8 @@ export function renderProposal(proposal) {
       const change = normalized.changes[changeIndex];
       if (!change) return;
 
-      change.after[key] = input.type === 'number' ? Number(input.value) : input.value;
+      const field = change.fields?.find((entry) => entry.key === key);
+      change.after[key] = field?.type === 'number' ? Number(input.value) : input.value;
       if (key === 'name') {
         change.label = input.value;
         const heading = card.querySelector(`[data-change-label="${changeIndex}"]`);
@@ -339,8 +545,7 @@ function setDecided(card, label) {
 }
 
 function buildProposalMarkup(normalized) {
-  const groups = normalized.changes
-    .map((change, index) => {
+  const renderChange = (change, index) => {
       const fields = (change.fields || [])
         .map(
           ({ key, label, type, options }) => `
@@ -378,13 +583,31 @@ function buildProposalMarkup(normalized) {
       <div class="chat-change chat-change-${change.op}">
         <div class="chat-change-head">
           <span class="chat-change-op chat-op-${change.op}">${change.op}</span>
-          <span class="chat-change-kind">${escapeHtml(change.kind)}</span>
           <strong data-change-label="${index}">${escapeHtml(change.label)}</strong>
         </div>
         ${change.summaryText ? `<p class="chat-change-note">${escapeHtml(change.summaryText)}</p>` : ''}
         ${fields ? `<div class="chat-fields">${fields}</div>` : ''}
         ${impact}
       </div>`;
+    };
+
+  const indexed = normalized.changes.map((change, index) => ({ change, index }));
+  const kinds = [...new Set(indexed.map(({ change }) => change.kind))];
+  const groups = kinds
+    .map((kind) => {
+      const meta = PROPOSAL_KIND_META[kind] || { label: kind, icon: 'edit' };
+      const entries = indexed.filter(({ change }) => change.kind === kind);
+      return `
+        <section class="chat-change-group">
+          <h3 class="chat-change-group-title">
+            <span class="material-symbols-rounded">${meta.icon}</span>
+            ${escapeHtml(meta.label)}
+            <span class="chat-change-count">${entries.length}</span>
+          </h3>
+          <div class="chat-change-group-items">
+            ${entries.map(({ change, index }) => renderChange(change, index)).join('')}
+          </div>
+        </section>`;
     })
     .join('');
 
@@ -500,15 +723,26 @@ async function send() {
     const result = await runTurn({
       text,
       attachments: sent,
-      supplements: getTrackerState(),
+      getSupplements: getTrackerState,
       signal: controller.signal,
       onProposal: renderProposal,
       onEvent: (event) => {
-        if (event.type === 'tool-running') {
+        if (event.type === 'turn-start' || event.type === 'status') {
+          trace.status(event.label || 'Waiting for response');
+        } else if (event.type === 'thinking') {
+          trace.thinking();
+        } else if (event.type === 'reasoning-summary') {
+          trace.reasoning(event.delta, event.reasoningId, event.summaryIndex);
+        } else if (event.type === 'reasoning-summary-done') {
+          trace.reasoningDone(event.text, event.reasoningId, event.summaryIndex);
+        } else if (event.type === 'tool-start' || event.type === 'tool-running') {
           trace.start(event.callId, event.name);
+        } else if (event.type === 'tool-args') {
+          trace.args(event.callId, event.name, event.args);
         } else if (event.type === 'tool-done') {
           trace.finish(event.callId, summarizeToolResult(event.name, event.result));
         } else if (event.type === 'text') {
+          trace.textStarted();
           streamed += event.delta;
           if (!bubble) bubble = appendMessage('assistant', '');
           if (bubble) bubble.innerHTML = renderMarkdown(streamed);
@@ -517,17 +751,19 @@ async function send() {
       }
     });
 
-    trace.remove();
+    trace.complete();
 
     // A turn that ends in a proposal often has no prose at all, which is fine.
     if (!streamed && result.text) {
       appendMessage('assistant', renderMarkdown(result.text));
     }
-    if (result.error) {
+    const contradictsVisibleText =
+      streamed && result.error === 'The model completed without returning a message. Please try again.';
+    if (result.error && !contradictsVisibleText) {
       appendMessage('assistant', `<p class="chat-error">${escapeHtml(result.error)}</p>`);
     }
   } catch (err) {
-    trace.remove();
+    trace.complete();
     const message = describeAiError(err);
     if (message) appendMessage('assistant', `<p class="chat-error">${escapeHtml(message)}</p>`);
   } finally {

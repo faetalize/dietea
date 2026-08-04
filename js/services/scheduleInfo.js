@@ -4,8 +4,8 @@
  * Pure derivation over `state` and `dataStore` with no DOM access. It lives in
  * services rather than alongside the schedule rendering because two very
  * different consumers need identical answers — the schedule views highlight
- * "today" and "now" with it, and the AI context tells the model what day and
- * meal it is. Keeping one copy is what stops the assistant from disagreeing
+ * "today" and "now" with it, while the AI runtime context and schedule tool use
+ * the same answers. Keeping one copy is what stops the assistant from disagreeing
  * with the screen the user is looking at.
  */
 

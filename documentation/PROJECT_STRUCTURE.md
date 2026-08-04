@@ -14,7 +14,8 @@ dietea/
 │   │   ├── dataStore.js    # In-memory store + shopping list aggregation
 │   │   ├── models.js       # FoodItem, FoodItemEntry, CookingInstruction, Meal
 │   │   ├── dataLoader.js   # Reads from Supabase; seeds new accounts
-│   │   └── mealSerde.js    # Meal hydrate/serialize
+│   │   ├── mealSerde.js    # Meal hydrate/serialize
+│   │   └── supplementCatalog.js # Fixed supplement definitions shared by UI + AI
 │   ├── services/
 │   │   ├── supabase.js     # Client construction + error translation
 │   │   ├── auth.js         # Sign in/up/out, session, current user
@@ -26,8 +27,9 @@ dietea/
 │   │   ├── credentials.js  # Encrypted credential vault
 │   │   ├── openai.js       # Responses API transport, both providers
 │   │   ├── codexAuth.js    # Codex OAuth (PKCE)
-│   │   ├── aiContext.js    # Session snapshot for the model
-│   │   └── agent.js        # Tools + the tool loop
+│   │   ├── aiContext.js    # Small clock/runtime context (live data stays in tools)
+│   │   ├── aiTools.js      # Live read tools + approval-gated proposal schemas
+│   │   └── agent.js        # Model-driven tool loop + proposal staging
 │   ├── utils/
 │   │   ├── helpers.js      # Formatting, slugify, day names, slot times
 │   │   └── feedback.js     # Toasts and form validation
@@ -87,6 +89,12 @@ Data and data shapes, with no DOM access.
 - `state.js` — the `state` object and its debounced round-trip to `dietea.profiles`.
 - `calories.js` — Mifflin-St Jeor BMR, TDEE, and goal-adjusted target calories.
 - `storage.js` — persists ingredients, meals, and the schedule.
+- `aiContext.js` — contributes only non-data runtime facts such as local time; live app
+  objects are fetched through tools instead of copied into every turn.
+- `aiTools.js` — exposes typed reads for ingredients, meals, schedule, profile,
+  supplements, and shopping data, plus focused and atomic proposal tools for writes.
+- `agent.js` — lets the model choose tools with `tool_choice: auto`, executes live reads,
+  and stages proposals without mutating data.
 
 ### `js/components/`
 

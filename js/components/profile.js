@@ -7,7 +7,8 @@ import {
   calculateProfileMetrics,
   calculateMacroTargets,
   getActivityLevelLabel,
-  isGoalRealistic
+  isGoalRealistic,
+  MACRO_STRATEGY
 } from '../services/calories.js';
 import { showToast, showFieldError, clearValidationErrors } from '../utils/feedback.js';
 
@@ -161,7 +162,7 @@ function renderMacroBreakdown(targetCalories, modeEl, valuesEl, wheelEl) {
 
   if (noteEl) {
     const fatMode = isFatLimited ? 'calorie-limited floor mode' : 'standard fat target mode';
-    noteEl.textContent = `Rules: protein = 1.6g/kg (${proteinG}g), fat target = 0.8g/kg (${fatTargetG}g), fat floor = 0.6g/kg (${fatFloorG}g). Current: ${fatMode}; carbs fill remaining calories.`;
+    noteEl.textContent = `Rules: protein = ${MACRO_STRATEGY.proteinGramsPerKg}g/kg (${proteinG}g), fat target = ${MACRO_STRATEGY.fatTargetGramsPerKg}g/kg (${fatTargetG}g), fat floor = ${MACRO_STRATEGY.fatFloorGramsPerKg}g/kg (${fatFloorG}g). Current: ${fatMode}; carbs fill remaining calories.`;
   }
 }
 

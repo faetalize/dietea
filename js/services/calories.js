@@ -98,6 +98,13 @@ export function getActivityLevelLabel(level) {
   return labels[level] || 'Moderate';
 }
 
+export const MACRO_STRATEGY = Object.freeze({
+  proteinGramsPerKg: 1.6,
+  fatTargetGramsPerKg: 0.8,
+  fatFloorGramsPerKg: 0.6,
+  remainderMacro: 'carbs'
+});
+
 /**
  * Split a daily calorie target into macro targets.
  *
@@ -111,7 +118,7 @@ export function getActivityLevelLabel(level) {
  * services layer alongside the BMR math and can be unit-reasoned about.
  *
  * This lives here because three callers need identical numbers: the profile
- * card, the schedule generator, and the AI context. It previously existed as two
+ * card, the schedule generator, and the AI profile tool. It previously existed as two
  * separate copies, which meant the agent could have reported targets that
  * disagreed with the wheel the user was looking at.
  */
@@ -120,11 +127,11 @@ export function calculateMacroTargets(targetCalories, weightKg) {
   const safeWeight = Number.isFinite(weight) && weight > 0 ? weight : 75;
   const calories = Number.isFinite(targetCalories) && targetCalories > 0 ? targetCalories : 2000;
 
-  const proteinG = Math.max(0, Math.round(safeWeight * 1.6));
+  const proteinG = Math.max(0, Math.round(safeWeight * MACRO_STRATEGY.proteinGramsPerKg));
   const proteinKcal = proteinG * 4;
 
-  const fatTargetG = Math.max(0, Math.round(safeWeight * 0.8));
-  const fatFloorG = Math.max(0, Math.round(safeWeight * 0.6));
+  const fatTargetG = Math.max(0, Math.round(safeWeight * MACRO_STRATEGY.fatTargetGramsPerKg));
+  const fatFloorG = Math.max(0, Math.round(safeWeight * MACRO_STRATEGY.fatFloorGramsPerKg));
   const maxFatByRemaining = Math.max(0, Math.floor((calories - proteinKcal) / 9));
 
   let fatsG = fatTargetG;

@@ -1,10 +1,12 @@
 {
   "name": "dietea",
   "version": "1.0.0",
+  "type": "module",
   "description": "Meal prep planner backed by Supabase",
   "scripts": {
     "dev": "npx live-server --ignore=data --ignorePattern=\"(\\.crswap$|Zone\\.Identifier$)\" --port=3000",
     "start": "npx live-server --ignore=data --ignorePattern=\"(\\.crswap$|Zone\\.Identifier$)\" --port=3000",
+    "test": "node --test",
     "vendor:supabase": "esbuild scripts/supabase-entry.js --bundle --format=esm --platform=browser --target=es2020 --minify --legal-comments=none --outfile=js/vendor/supabase.js"
   },
   "devDependencies": {

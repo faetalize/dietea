@@ -32,6 +32,7 @@ const CODEX_URL = 'https://chatgpt.com/backend-api/codex/responses';
  * the old one.
  */
 let conversationId = crypto.randomUUID();
+let streamSequence = 0;
 
 export function resetConversationId() {
   conversationId = crypto.randomUUID();
@@ -164,7 +165,16 @@ async function resolveProvider() {
  * model needs back on the next request to keep its chain of thought across
  * tool calls.
  */
-export async function streamResponse({ input, tools, instructions, effort, signal, onEvent }) {
+export async function streamResponse({
+  input,
+  tools,
+  instructions,
+  effort,
+  signal,
+  onEvent,
+  toolChoice = 'auto',
+  parallelToolCalls = false
+}) {
   const provider = await resolveProvider();
 
   const body = {
@@ -175,8 +185,15 @@ export async function streamResponse({ input, tools, instructions, effort, signa
     stream: true,
     store: false,
     include: ['reasoning.encrypted_content'],
-    parallel_tool_calls: true,
-    reasoning: { effort: effort || state.ai?.reasoningEffort || 'medium' }
+    tool_choice: toolChoice,
+    parallel_tool_calls: parallelToolCalls,
+    // `summary` is the user-visible explanation surface used by Codex. The
+    // encrypted/raw reasoning stays in history for model continuity but is
+    // never displayed.
+    reasoning: {
+      effort: effort || state.ai?.reasoningEffort || 'medium',
+      summary: 'auto'
+    }
   };
 
   const response = await fetch(provider.url, {
@@ -190,7 +207,7 @@ export async function streamResponse({ input, tools, instructions, effort, signa
     throw await buildHttpError(response);
   }
 
-  return consumeStream(response, onEvent);
+  return consumeResponseStream(response, onEvent, `stream-${++streamSequence}`);
 }
 
 async function buildHttpError(response) {
@@ -214,13 +231,36 @@ async function buildHttpError(response) {
  * boundary can land anywhere — including mid-line — so the tail of each read is
  * held back until a delimiter proves it complete.
  */
-async function consumeStream(response, onEvent) {
+export async function consumeResponseStream(response, onEvent, streamId = `stream-${++streamSequence}`) {
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
 
   let buffer = '';
   let completed = null;
   let failure = null;
+  let streamedText = '';
+  const streamedItems = [];
+
+  function capture(payload) {
+    if (!payload) return;
+
+    if (payload.type === 'response.completed') {
+      completed = payload.response;
+    } else if (payload.type === 'response.failed' || payload.type === 'error') {
+      failure = payload.response?.error || payload.error || { message: 'The model run failed.' };
+    } else {
+      if (payload.type === 'response.output_text.delta') {
+        streamedText += payload.delta || '';
+      } else if (payload.type === 'response.output_item.done' && payload.item) {
+        // The Codex endpoint can leave `response.completed.response.output`
+        // incomplete even though it emitted the finished items while
+        // streaming. Retain those authoritative done events by output index.
+        const index = Number.isInteger(payload.output_index) ? payload.output_index : streamedItems.length;
+        streamedItems[index] = payload.item;
+      }
+      dispatch(payload, onEvent, streamId);
+    }
+  }
 
   while (true) {
     const { done, value } = await reader.read();
@@ -229,22 +269,16 @@ async function consumeStream(response, onEvent) {
     buffer += decoder.decode(value, { stream: true });
 
     let boundary;
-    while ((boundary = buffer.indexOf('\n\n')) !== -1) {
+    while ((boundary = buffer.search(/\r?\n\r?\n/)) !== -1) {
+      const delimiter = buffer.slice(boundary).match(/^\r?\n\r?\n/)?.[0] || '\n\n';
       const raw = buffer.slice(0, boundary);
-      buffer = buffer.slice(boundary + 2);
-
-      const payload = parseEvent(raw);
-      if (!payload) continue;
-
-      if (payload.type === 'response.completed') {
-        completed = payload.response;
-      } else if (payload.type === 'response.failed' || payload.type === 'error') {
-        failure = payload.response?.error || payload.error || { message: 'The model run failed.' };
-      } else {
-        dispatch(payload, onEvent);
-      }
+      buffer = buffer.slice(boundary + delimiter.length);
+      capture(parseEvent(raw));
     }
   }
+
+  buffer += decoder.decode();
+  if (buffer.trim()) capture(parseEvent(buffer));
 
   if (failure) {
     const error = new Error(failure.message || 'The model run failed.');
@@ -256,12 +290,27 @@ async function consumeStream(response, onEvent) {
     throw new Error('The model stream ended before completing.');
   }
 
-  return completed;
+  const completedItems = Array.isArray(completed.output) ? completed.output : [];
+  const outputLength = Math.max(completedItems.length, streamedItems.length);
+  const output = [];
+
+  for (let index = 0; index < outputLength; index++) {
+    const item = streamedItems[index] || completedItems[index];
+    if (item) output.push(item);
+  }
+
+  return {
+    ...completed,
+    output,
+    // Kept separately as a last-resort consistency check. The UI already saw
+    // these exact deltas, so a non-empty value is a real assistant response.
+    streamedText: streamedText.trim()
+  };
 }
 
 function parseEvent(raw) {
   const dataLines = raw
-    .split('\n')
+    .split(/\r?\n/)
     .filter((line) => line.startsWith('data:'))
     .map((line) => line.slice(5).trim());
 
@@ -281,12 +330,30 @@ function parseEvent(raw) {
  * Translate stream events into the small set the UI actually renders.
  * Everything else is deliberately dropped rather than surfaced.
  */
-function dispatch(payload, onEvent) {
+function dispatch(payload, onEvent, streamId) {
   if (!onEvent) return;
 
   switch (payload.type) {
     case 'response.output_text.delta':
       onEvent({ type: 'text', delta: payload.delta || '' });
+      break;
+
+    case 'response.reasoning_summary_text.delta':
+      onEvent({
+        type: 'reasoning-summary',
+        delta: payload.delta || '',
+        reasoningId: payload.item_id || `${streamId}-${payload.output_index ?? 0}-${payload.summary_index ?? 0}`,
+        summaryIndex: payload.summary_index ?? 0
+      });
+      break;
+
+    case 'response.reasoning_summary_text.done':
+      onEvent({
+        type: 'reasoning-summary-done',
+        text: payload.text || '',
+        reasoningId: payload.item_id || `${streamId}-${payload.output_index ?? 0}-${payload.summary_index ?? 0}`,
+        summaryIndex: payload.summary_index ?? 0
+      });
       break;
 
     case 'response.output_item.added':
@@ -301,7 +368,12 @@ function dispatch(payload, onEvent) {
 
     case 'response.output_item.done':
       if (payload.item?.type === 'function_call') {
-        onEvent({ type: 'tool-args', callId: payload.item.call_id, args: payload.item.arguments });
+        onEvent({
+          type: 'tool-args',
+          name: payload.item.name,
+          callId: payload.item.call_id,
+          args: payload.item.arguments
+        });
       }
       break;
 

@@ -11,7 +11,14 @@
  * proposal, not the app.
  */
 
-import { dataStore, getMealById, setIngredients, setMeals, setSchedule } from '../core/dataStore.js';
+import {
+  aggregateShoppingList,
+  dataStore,
+  getMealById,
+  setIngredients,
+  setMeals,
+  setSchedule
+} from '../core/dataStore.js';
 import { FoodItem, Meal, FoodItemEntry, CookingInstruction } from '../core/models.js';
 import { saveIngredients, saveMeals, saveSchedule } from '../services/storage.js';
 import { state, updateProfile, flushState } from '../services/state.js';
@@ -167,6 +174,8 @@ function normalizeMeal(entry) {
       { key: 'name', label: 'Name', type: 'text' },
       { key: 'type', label: 'Type', type: 'select', options: ['Breakfast', 'Lunch', 'Snack', 'Dinner'] }
     ],
+    summaryText: `${after.ingredients.length} ingredient${after.ingredients.length === 1 ? '' : 's'} · ` +
+      `${after.instructions.length} instruction section${after.instructions.length === 1 ? '' : 's'}`,
     impact: []
   };
 }
@@ -198,6 +207,10 @@ function normalizeScheduleDay(entry, pendingMeals) {
     before: null,
     after: { day: dayIndex, isCheatDay: entry.isCheatDay, slots: slotChanges },
     fields: [],
+    summaryText:
+      entry.isCheatDay === true
+        ? 'Set as cheat day and clear its meal slots'
+        : slotChanges.map((slot) => `${slot.slot}: ${slot.fromName} → ${slot.toName}`).join(' · '),
     impact: []
   };
 }
@@ -220,9 +233,13 @@ function normalizeSupplements(entry) {
     before: null,
     after: entry,
     fields: [
-      { key: 'waterConsumedMl', label: 'Water today (ml)', type: 'number' },
-      { key: 'bottleSizeMl', label: 'Bottle size (ml)', type: 'number' }
-    ],
+      Number.isFinite(entry.waterConsumedMl)
+        ? { key: 'waterConsumedMl', label: 'Water today (ml)', type: 'number' }
+        : null,
+      Number.isFinite(entry.bottleSizeMl)
+        ? { key: 'bottleSizeMl', label: 'Bottle size (ml)', type: 'number' }
+        : null
+    ].filter(Boolean),
     summaryText: parts.join(', '),
     impact: []
   };
@@ -242,6 +259,16 @@ function normalizeProfile(entry) {
 
   if (!changed) return null;
 
+  const fieldDefinitions = {
+    age: { key: 'age', label: 'Age', type: 'number' },
+    sex: { key: 'sex', label: 'Sex', type: 'select', options: ['male', 'female'] },
+    weight: { key: 'weight', label: 'Weight (kg)', type: 'number' },
+    height: { key: 'height', label: 'Height (cm)', type: 'number' },
+    activityLevel: { key: 'activityLevel', label: 'Activity multiplier', type: 'number' },
+    goalWeight: { key: 'goalWeight', label: 'Goal weight (kg)', type: 'number' },
+    goalMonths: { key: 'goalMonths', label: 'Timeframe (months)', type: 'number' }
+  };
+
   return {
     kind: 'profile',
     op: 'update',
@@ -249,19 +276,50 @@ function normalizeProfile(entry) {
     label: 'Body profile',
     before: { ...before },
     after,
-    fields: [
-      { key: 'weight', label: 'Weight (kg)', type: 'number' },
-      { key: 'height', label: 'Height (cm)', type: 'number' },
-      { key: 'age', label: 'Age', type: 'number' },
-      { key: 'goalWeight', label: 'Goal weight (kg)', type: 'number' },
-      { key: 'goalMonths', label: 'Timeframe (months)', type: 'number' }
-    ],
+    fields: keys
+      .filter((key) => entry[key] !== null && entry[key] !== undefined)
+      .map((key) => fieldDefinitions[key]),
     impact: [
       {
         severity: 'info',
         text: 'Changing this recalculates your maintenance and target calories, which shifts every macro target in the app.'
       }
     ]
+  };
+}
+
+function slugify(value = '') {
+  return String(value)
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '');
+}
+
+function findShoppingItem(trackingId) {
+  for (const category of aggregateShoppingList()) {
+    const index = category.items.findIndex(
+      (item, itemIndex) => `${slugify(category.category)}-${item.id || itemIndex}` === trackingId
+    );
+    if (index >= 0) return category.items[index];
+  }
+  return null;
+}
+
+function normalizeShopping(entry) {
+  const item = findShoppingItem(entry.trackingId);
+  if (!item) return null;
+
+  return {
+    kind: 'shopping',
+    op: 'update',
+    id: entry.trackingId,
+    label: item.name,
+    before: { checked: !!state.checkedItems[entry.trackingId] },
+    after: { trackingId: entry.trackingId, checked: !!entry.checked },
+    fields: [],
+    summaryText: entry.checked ? 'Mark as acquired' : 'Mark as still needed',
+    impact: []
   };
 }
 
@@ -294,6 +352,11 @@ export function normalizeProposal(proposal) {
     if (change) changes.push(change);
   }
 
+  for (const entry of raw.shopping || []) {
+    const change = normalizeShopping(entry);
+    if (change) changes.push(change);
+  }
+
   return { ...proposal, changes };
 }
 
@@ -320,6 +383,7 @@ export async function applyProposal(normalized) {
   const scheduleChanges = changes.filter((c) => c.kind === 'schedule');
   const supplementChange = changes.find((c) => c.kind === 'supplements');
   const profileChange = changes.find((c) => c.kind === 'profile');
+  const shoppingChanges = changes.filter((c) => c.kind === 'shopping');
 
   if (ingredientChanges.length) {
     const previous = [...dataStore.ingredients];
@@ -390,8 +454,8 @@ export async function applyProposal(normalized) {
 
   if (supplementChange) {
     await applySupplementChanges({
-      waterConsumedMl: Number(supplementChange.after.waterConsumedMl),
-      bottleSizeMl: Number(supplementChange.after.bottleSizeMl),
+      waterConsumedMl: supplementChange.after.waterConsumedMl,
+      bottleSizeMl: supplementChange.after.bottleSizeMl,
       completed: supplementChange.after.completed
     });
     applied.push(supplementChange);
@@ -408,6 +472,19 @@ export async function applyProposal(normalized) {
     }
     await flushState();
     applied.push(profileChange);
+  }
+
+  if (shoppingChanges.length) {
+    const previous = { ...state.checkedItems };
+    for (const change of shoppingChanges) {
+      state.checkedItems[change.after.trackingId] = change.after.checked;
+    }
+
+    if (!(await flushState())) {
+      state.checkedItems = previous;
+      return { ok: false, applied: [] };
+    }
+    applied.push(...shoppingChanges);
   }
 
   return { ok: true, applied };

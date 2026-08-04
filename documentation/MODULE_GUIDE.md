@@ -250,7 +250,7 @@ Percentages are computed so the three always sum to exactly 100. Pure and
 weight-passed rather than reading `state`, so it stays usable from any layer.
 
 > Three callers depend on identical numbers here — the profile card, the schedule
-> generator, and the AI session context. This used to exist as two copies, which meant the
+> generator, and the AI profile tool. This used to exist as two copies, which meant the
 > assistant could quote targets that disagreed with the wheel on screen.
 
 ### `js/services/scheduleInfo.js`
@@ -265,8 +265,8 @@ getCurrentDayIndex();   // index of today in the schedule, or -1
 getCurrentMealSlot();   // 'breakfast' | 'lunch' | 'snack' | 'dinner' | null
 ```
 
-Lives in services rather than beside the schedule views because the AI context needs the
-same answers, and services cannot import components.
+Lives in services rather than beside the schedule views because the AI runtime context and
+schedule tool need the same answers, and services cannot import components.
 
 ### `js/services/storage.js`
 
@@ -358,8 +358,12 @@ cannot read them, so prompt rather than offering setup.
 The only module that talks to a model. One call, two providers.
 
 ```javascript
-const response = await streamResponse({ input, tools, instructions, effort, signal, onEvent });
+const response = await streamResponse({
+  input, tools, instructions, effort, signal, onEvent,
+  toolChoice: 'auto', parallelToolCalls: true
+});
 response.output;   // authoritative items — append verbatim to history
+response.streamedText; // exact concatenated text deltas, used only as a consistency fallback
 ```
 
 `store: false` always, with `include: ['reasoning.encrypted_content']` so reasoning
@@ -388,7 +392,21 @@ The difference is the context window, and it belongs to the **endpoint, not the 
 Codex caps every model at 272k where the API allows 1.05M. Sol, Terra and Luna have
 identical windows as each other on both.
 
-`onEvent` receives `{type: 'text'|'tool-start'|'tool-args'|'thinking'}` for live UI.
+The parser rebuilds `response.output` from `response.output_item.done` events because the
+Codex endpoint can stream a complete answer while leaving the final
+`response.completed.response.output` incomplete. `streamedText` is a second fallback, so
+text already rendered by the UI can never be reclassified as an empty response afterward.
+Both LF and CRLF SSE delimiters are accepted.
+
+Requests ask for `reasoning.summary: 'auto'`. `onEvent` receives text deltas, tool start
+and completed-argument events, actual reasoning-item state, and
+`reasoning-summary`/`reasoning-summary-done` events for the live UI. Only the model's
+purpose-built reasoning summary is displayable; raw or encrypted reasoning stays in
+history and is never rendered.
+
+`toolChoice` stays `auto`: the model decides whether to read data, stage a proposal, or
+answer. Independent calls may be returned together with `parallelToolCalls: true`; the
+host sends their outputs back in the original call order.
 `describeAiError(err)` translates failures; it returns `''` for an abort, since a user
 cancelling is not an error to report.
 
@@ -422,22 +440,49 @@ into "could not reach the server" — true, useless, and pointing at the wrong p
 
 ### `js/services/aiContext.js`
 
-`buildSessionContext(supplements)` returns the per-turn snapshot as compact text: date and
-current meal slot, profile and macro targets, the week, one line per meal, one line per
-ingredient. Cooking instructions are excluded — `get_meal` fetches those on demand.
+`buildRuntimeContext()` supplies only local date/time, timezone, and the current meal
+window. Live profile, schedule, meal, ingredient, supplement, and shopping-list data are
+not duplicated into the prompt; the model reads them on demand through tools.
+
+### `js/services/aiTools.js`
+
+The model's typed live-data surface. Read tools execute against the in-memory store at
+call time:
+
+- `list_ingredients`, `get_ingredient`
+- `list_meals`, `get_meal`
+- `get_schedule`, `get_profile`, `get_supplements`, `get_shopping_list`
+
+`get_profile` returns both the calculated targets and a structured `macroStrategy`:
+protein fixed per kilogram, a per-kilogram fat target with a floor under calorie
+pressure, and carbohydrates filling the remaining calories. The strategy ratios come
+from the same constants used by the calculator and profile card.
+
+Writes are deliberately phrased as proposals because they stop at the approval boundary:
+`propose_ingredient_changes`, `propose_meal_changes`, `propose_schedule_changes`,
+`propose_supplement_changes`, `propose_profile_changes`, and
+`propose_shopping_changes`. `propose_changes` is the atomic cross-domain option for
+dependent changes such as creating an ingredient, using it in a meal, and scheduling that
+meal together.
 
 ### `js/services/agent.js`
 
 Tool definitions and the loop.
 
 ```javascript
-await runTurn({ text, attachments, supplements, signal, onEvent, onProposal });
+await runTurn({ text, attachments, getSupplements, signal, onEvent, onProposal });
 recordProposalOutcome(proposalId, 'accepted', appliedValues);
 clearConversation();
 ```
 
-Three tools: `search_ingredients`, `get_meal`, and `propose_changes` — the single write
-path, covering create, update and delete across every domain in one call.
+There is no lexical intent classifier and the host never forces tool use from words in the
+user's message. Every model call uses automatic tool choice. Read calls are executed and
+returned until the model answers; a proposal call stages a review card and ends the turn.
+Multiple focused proposal calls returned together are merged into one approval card so
+the user reviews and accepts the whole batch once.
+
+The loop has no arbitrary tool-round ceiling. The user-facing Stop button aborts the
+active request, which is the explicit yield/cancellation path for long-running work.
 
 Two invariants:
 
@@ -447,6 +492,8 @@ Two invariants:
 - `recordProposalOutcome` echoes the **applied** values, not the proposed ones. The user
   can edit a card before accepting; without this the model's picture of the database
   drifts.
+- Proposal tools never mutate application data. Only the card's Accept action calls the
+  existing persistence functions, in dependency order.
 
 ## Utils
 
@@ -653,9 +700,11 @@ Two corrections are baked into that water figure, and both matter:
 Both are conventions, not precision. If `height` is missing the adjustment is skipped and
 actual weight is used.
 
-The supplement list itself is a hardcoded `SUPPLEMENTS` constant in the module, not user
-data. Its ids are the keys inside the `completed` JSONB column, so renaming an id orphans
-that supplement's history; renaming a label is free.
+The supplement list itself comes from the fixed catalog in
+`js/core/supplementCatalog.js`, not user data. The tracker UI reads it directly and
+`get_supplements` exposes the same catalog to the model, so names and ids cannot drift.
+Its ids are the keys inside the `completed` JSONB column, so renaming an id orphans that
+supplement's history; renaming a label is free.
 
 ### `js/components/profile.js`
 
@@ -700,9 +749,12 @@ renderGate();               // re-evaluate after credentials or provider change
 renderProposal(proposal);   // also usable outside a live turn
 ```
 
-Tool activity renders as a live step list. GPT-5.6's guidance is against scripting
-preambles into the prompt, so legibility has to come from the UI — a multi-step turn that
-shows nothing between steps reads as frozen.
+Agent work renders as a live step list. A generic “Waiting for response” status appears
+immediately and disappears as soon as text starts streaming. “Thinking” is reserved for
+an actual reasoning output item; it becomes a completed “Reasoned” row when text begins,
+or a model-authored reasoning-summary row with expandable detail when a summary is
+available. Tool calls show their start, safe argument summary, and completion result. Raw
+chain-of-thought is never shown.
 
 Model output is escaped before its minimal markdown is applied, so text quoted off a
 photographed label cannot inject markup.
@@ -719,7 +771,7 @@ a flat change list, `applyProposal` to commit one.
 { kind, op: 'create'|'update'|'delete', id, label, before, after, fields, impact }
 ```
 
-`applyProposal` runs ingredients → meals → schedule → supplements → profile. That order is
+`applyProposal` runs ingredients → meals → schedule → supplements → profile → shopping. That order is
 not cosmetic: a meal referencing a newly created ingredient only resolves once that
 ingredient is in the store. Each collection uses the app's snapshot / swap / roll-back-on-
 false pattern, so a failure leaves the store as it was.

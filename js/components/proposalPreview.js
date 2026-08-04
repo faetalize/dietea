@@ -241,7 +241,9 @@ export function openPreview(normalized) {
   const ingredients = changes.filter((c) => c.kind === 'ingredient');
   const meals = changes.filter((c) => c.kind === 'meal');
   const schedule = changes.filter((c) => c.kind === 'schedule');
-  const others = changes.filter((c) => c.kind === 'supplements' || c.kind === 'profile');
+  const supplements = changes.filter((c) => c.kind === 'supplements');
+  const profile = changes.filter((c) => c.kind === 'profile');
+  const shopping = changes.filter((c) => c.kind === 'shopping');
 
   root.innerHTML = `
     <div class="preview-backdrop" data-action="close"></div>
@@ -260,7 +262,9 @@ export function openPreview(normalized) {
         ${section('Ingredients', 'nutrition', ingredients.length ? `<div class="ingredients-grid">${ingredients.map(renderIngredient).join('')}</div>` : '')}
         ${section('Meals', 'restaurant_menu', meals.length ? `<div class="preview-grid">${meals.map((m) => renderMeal(m, ingredients)).join('')}</div>` : '')}
         ${section('Schedule', 'calendar_month', schedule.length ? renderSchedule(schedule, meals) : '')}
-        ${section('Other', 'tune', others.length ? others.map(renderSimple).join('') : '')}
+        ${section("Today's tracking", 'medication', supplements.map(renderSimple).join(''))}
+        ${section('Profile & goals', 'person', profile.map(renderSimple).join(''))}
+        ${section('Shopping list', 'shopping_cart', shopping.map(renderSimple).join(''))}
       </div>
 
       <footer class="preview-footer">
